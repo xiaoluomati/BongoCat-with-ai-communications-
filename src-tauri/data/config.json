@@ -1,0 +1,46 @@
+{
+  "llm": {
+    "provider": "deepseek",
+    "deepseek": {
+      "api_key": "",
+      "base_url": "https://api.deepseek.com/v1",
+      "model": "deepseek-chat"
+    },
+    "minimax": {
+      "api_key": "",
+      "group_id": "",
+      "model": "abab6.5s-chat"
+    },
+    "kimi": {
+      "api_key": "",
+      "base_url": "https://api.moonshot.cn/v1",
+      "model": "moonshot-v1-8k"
+    },
+    "temperature": 0.8,
+    "max_tokens": 500,
+    "stream": true
+  },
+  "chat": {
+    "enabled": true,
+    "max_messages": 100,
+    "window_width": 500,
+    "window_height": 700
+  },
+  "tts": {
+    "enabled": false,
+    "provider": "indextts2",
+    "indextts2": {
+      "base_url": "http://localhost:5000"
+    }
+  },
+  "memory": {
+    "enabled": true,
+    "retention_days": 30,
+    "context_weeks": 2,
+    "auto_summary": true,
+    "profile_update_interval": 50
+  },
+  "characters": {
+    "current": "cat"
+  }
+}
