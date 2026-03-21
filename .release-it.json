@@ -1,0 +1,26 @@
+{
+  "$schema": "https://unpkg.com/release-it@18/schema/release-it.json",
+  "git": {
+    "commitMessage": "chore: release v${version}",
+    "tagName": "v${version}"
+  },
+  "github": {
+    "release": true
+  },
+  "npm": {
+    "publish": false
+  },
+  "plugins": {
+    "@release-it/bumper": {
+      "out": [
+        {
+          "file": "src-tauri/Cargo.toml",
+          "path": "package.version"
+        }
+      ]
+    }
+  },
+  "hooks": {
+    "after:bump": "echo 'Version bumped to ${version}'"
+  }
+}
