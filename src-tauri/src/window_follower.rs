@@ -32,6 +32,22 @@ impl Default for WindowFollower {
     }
 }
 
+/// 找到包含给定点的显示器
+fn find_monitor_at_point(
+    monitors: &[tauri::Monitor],
+    x: i32,
+    y: i32,
+) -> Option<tauri::Monitor> {
+    monitors.iter().find(|m| {
+        let pos = m.position();
+        let size = m.size();
+        x >= pos.x
+            && x < pos.x + size.width as i32
+            && y >= pos.y
+            && y < pos.y + size.height as i32
+    }).cloned()
+}
+
 /// 计算并设置聊天窗口位置
 pub fn sync_chat_window_position(app: &tauri::AppHandle) -> Result<(), String> {
     let follower = app
@@ -56,32 +72,48 @@ pub fn sync_chat_window_position(app: &tauri::AppHandle) -> Result<(), String> {
     let main_pos = main_window.outer_position().map_err(|e| e.to_string())?;
     let main_size = main_window.outer_size().map_err(|e| e.to_string())?;
 
-    // 获取当前显示器
-    let monitor = main_window
-        .current_monitor()
-        .map_err(|e| e.to_string())?
-        .ok_or("No monitor found")?;
-    let screen_size = monitor.size();
+    // 获取所有可用显示器
+    let monitors = main_window
+        .available_monitors()
+        .map_err(|e| e.to_string())?;
 
-    // 计算主窗口中心点相对于屏幕的位置
+    // 计算主窗口中心点
     let pet_center_x = main_pos.x + (main_size.width as i32 / 2);
-    let screen_center_x = screen_size.width as i32 / 2;
+    let pet_center_y = main_pos.y + (main_size.height as i32 / 2);
 
-    // 根据主窗口位置决定聊天窗口显示在哪一侧
-    let chat_x = if pet_center_x < screen_center_x {
-        // 主窗口在左，聊天窗口在右侧
+    // 找到主窗口实际所在的显示器（通过中心点判断）
+    let monitor = find_monitor_at_point(&monitors, pet_center_x, pet_center_y)
+        .or_else(|| main_window.current_monitor().ok().flatten()) // 回退到 current_monitor
+        .or_else(|| monitors.first().cloned()) // 最后回退到第一个显示器
+        .ok_or("No monitor available")?;
+
+    let monitor_pos = monitor.position();
+    let monitor_size = monitor.size();
+
+    // 计算主窗口中心点相对于当前显示器的坐标
+    let relative_center_x = pet_center_x - monitor_pos.x;
+    let monitor_center_x = monitor_size.width as i32 / 2;
+
+    // 根据主窗口在当前显示器中的位置决定聊天窗口显示在哪一侧
+    let chat_x = if relative_center_x < monitor_center_x {
+        // 主窗口在当前显示器左侧，聊天窗口放在右侧
         main_pos.x + main_size.width as i32 + WINDOW_GAP
     } else {
-        // 主窗口在右，聊天窗口在左侧
+        // 主窗口在当前显示器右侧，聊天窗口放在左侧
         main_pos.x - CHAT_WINDOW_WIDTH - WINDOW_GAP
     };
 
     // 垂直居中
     let chat_y = main_pos.y + (main_size.height as i32 - CHAT_WINDOW_HEIGHT) / 2;
 
-    // 边界检查，确保不超出屏幕
-    let chat_x = chat_x.max(0).min(screen_size.width as i32 - CHAT_WINDOW_WIDTH);
-    let chat_y = chat_y.max(0).min(screen_size.height as i32 - CHAT_WINDOW_HEIGHT);
+    // 边界检查，确保在当前显示器范围内
+    let min_x = monitor_pos.x;
+    let max_x = monitor_pos.x + monitor_size.width as i32 - CHAT_WINDOW_WIDTH;
+    let min_y = monitor_pos.y;
+    let max_y = monitor_pos.y + monitor_size.height as i32 - CHAT_WINDOW_HEIGHT;
+
+    let chat_x = chat_x.max(min_x).min(max_x);
+    let chat_y = chat_y.max(min_y).min(max_y);
 
     chat_window
         .set_position(tauri::Position::Physical(tauri::PhysicalPosition {
