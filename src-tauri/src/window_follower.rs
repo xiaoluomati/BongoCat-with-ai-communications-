@@ -53,8 +53,8 @@ fn find_monitor_at_point(
 /// 1. 检测主窗口所在屏幕
 /// 2. 获取屏幕长宽
 /// 3. 主窗口左上角位置为 a（屏幕相对坐标）
-/// 4. 如果 a 在屏幕左半：b = a + 主窗口宽度 + 12
-/// 5. 如果 a 在屏幕右半：b = a - 聊天窗口宽度 - 12
+/// 4. 如果 a 在屏幕上半：聊天窗口放在主窗口下方，b = a.y + 主窗口高度 + 12
+/// 5. 如果 a 在屏幕下半：聊天窗口放在主窗口上方，b = a.y - 聊天窗口高度 - 12
 pub fn sync_chat_window_position(app: &tauri::AppHandle) -> Result<(), String> {
     let follower = app
         .try_state::<Arc<WindowFollower>>()
@@ -97,20 +97,20 @@ pub fn sync_chat_window_position(app: &tauri::AppHandle) -> Result<(), String> {
     let monitor_size = monitor.size();
 
     // 计算主窗口左上角相对于当前屏幕的位置 a
-    let a_x = main_pos.x - monitor_pos.x;
-    let screen_half_width = monitor_size.width as i32 / 2;
+    let a_y = main_pos.y - monitor_pos.y;
+    let screen_half_height = monitor_size.height as i32 / 2;
 
-    // 判断 a 在屏幕左半还是右半，计算聊天窗口位置 b
-    let chat_x = if a_x < screen_half_width {
-        // a 在屏幕左半：b = a + 主窗口宽度 + 间距
-        main_pos.x + main_size.width as i32 + WINDOW_GAP
+    // 水平居中
+    let chat_x = main_pos.x + (main_size.width as i32 - CHAT_WINDOW_WIDTH) / 2;
+
+    // 判断 a 在屏幕上半还是下半，计算聊天窗口位置 b
+    let chat_y = if a_y < screen_half_height {
+        // a 在屏幕上半：聊天窗口放在主窗口下方，b = a.y + 主窗口高度 + 间距
+        main_pos.y + main_size.height as i32 + WINDOW_GAP
     } else {
-        // a 在屏幕右半：b = a - 聊天窗口宽度 - 间距
-        main_pos.x - CHAT_WINDOW_WIDTH - WINDOW_GAP
+        // a 在屏幕下半：聊天窗口放在主窗口上方，b = a.y - 聊天窗口高度 - 间距
+        main_pos.y - CHAT_WINDOW_HEIGHT - WINDOW_GAP
     };
-
-    // 垂直居中
-    let chat_y = main_pos.y + (main_size.height as i32 - CHAT_WINDOW_HEIGHT) / 2;
 
     // 边界检查，确保在当前显示器范围内
     let min_x = monitor_pos.x;
