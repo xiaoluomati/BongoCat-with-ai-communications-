@@ -49,6 +49,12 @@ fn find_monitor_at_point(
 }
 
 /// 计算并设置聊天窗口位置
+/// 算法：
+/// 1. 检测主窗口所在屏幕
+/// 2. 获取屏幕长宽
+/// 3. 主窗口左上角位置为 a（屏幕相对坐标）
+/// 4. 如果 a 在屏幕左半：b = a + 主窗口宽度 + 12
+/// 5. 如果 a 在屏幕右半：b = a - 聊天窗口宽度 - 12
 pub fn sync_chat_window_position(app: &tauri::AppHandle) -> Result<(), String> {
     let follower = app
         .try_state::<Arc<WindowFollower>>()
@@ -72,9 +78,6 @@ pub fn sync_chat_window_position(app: &tauri::AppHandle) -> Result<(), String> {
     let main_pos = main_window.outer_position().map_err(|e| e.to_string())?;
     let main_size = main_window.outer_size().map_err(|e| e.to_string())?;
 
-    // 获取聊天窗口当前位置
-    let chat_pos = chat_window.outer_position().map_err(|e| e.to_string())?;
-
     // 获取所有可用显示器
     let monitors = main_window
         .available_monitors()
@@ -86,38 +89,36 @@ pub fn sync_chat_window_position(app: &tauri::AppHandle) -> Result<(), String> {
 
     // 找到主窗口实际所在的显示器（通过中心点判断）
     let monitor = find_monitor_at_point(&monitors, pet_center_x, pet_center_y)
-        .or_else(|| main_window.current_monitor().ok().flatten()) // 回退到 current_monitor
-        .or_else(|| monitors.first().cloned()) // 最后回退到第一个显示器
+        .or_else(|| main_window.current_monitor().ok().flatten())
+        .or_else(|| monitors.first().cloned())
         .ok_or("No monitor available")?;
 
     let monitor_pos = monitor.position();
     let monitor_size = monitor.size();
 
-    // 判断聊天窗口当前在主窗口的哪一侧
-    let chat_center_x = chat_pos.x + CHAT_WINDOW_WIDTH / 2;
-    let is_chat_on_left = chat_center_x < pet_center_x;
+    // 计算主窗口左上角相对于当前屏幕的位置 a
+    let a_x = main_pos.x - monitor_pos.x;
+    let screen_half_width = monitor_size.width as i32 / 2;
 
-    // 根据当前位置计算新的聊天窗口位置，保持间距避免重叠
-    let chat_x = if is_chat_on_left {
-        // 聊天窗口在左侧：放在主窗口左边，保持间距
-        // 如果主窗口向左移动接近聊天窗口，聊天窗口也向左移动保持间距
-        let desired_x = main_pos.x - CHAT_WINDOW_WIDTH - WINDOW_GAP;
-        // 确保不超出显示器左边界
-        desired_x.max(monitor_pos.x)
+    // 判断 a 在屏幕左半还是右半，计算聊天窗口位置 b
+    let chat_x = if a_x < screen_half_width {
+        // a 在屏幕左半：b = a + 主窗口宽度 + 间距
+        main_pos.x + main_size.width as i32 + WINDOW_GAP
     } else {
-        // 聊天窗口在右侧：放在主窗口右边，保持间距
-        let desired_x = main_pos.x + main_size.width as i32 + WINDOW_GAP;
-        // 确保不超出显示器右边界
-        let max_x = monitor_pos.x + monitor_size.width as i32 - CHAT_WINDOW_WIDTH;
-        desired_x.min(max_x)
+        // a 在屏幕右半：b = a - 聊天窗口宽度 - 间距
+        main_pos.x - CHAT_WINDOW_WIDTH - WINDOW_GAP
     };
 
     // 垂直居中
     let chat_y = main_pos.y + (main_size.height as i32 - CHAT_WINDOW_HEIGHT) / 2;
 
     // 边界检查，确保在当前显示器范围内
+    let min_x = monitor_pos.x;
+    let max_x = monitor_pos.x + monitor_size.width as i32 - CHAT_WINDOW_WIDTH;
     let min_y = monitor_pos.y;
     let max_y = monitor_pos.y + monitor_size.height as i32 - CHAT_WINDOW_HEIGHT;
+
+    let chat_x = chat_x.max(min_x).min(max_x);
     let chat_y = chat_y.max(min_y).min(max_y);
 
     chat_window
