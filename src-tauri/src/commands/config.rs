@@ -43,7 +43,6 @@ pub struct ProviderConfig {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MinimaxConfig {
     pub api_key: String,
-    pub group_id: String,
     pub model: String,
 }
 
@@ -127,24 +126,21 @@ pub fn get_llm_config() -> Result<LLMConfig, String> {
         _ => crate::llm::LLMProvider::DeepSeek,
     };
     
-    let (api_key, base_url, model, group_id) = match provider {
+    let (api_key, base_url, model) = match provider {
         crate::llm::LLMProvider::DeepSeek => (
             config.llm.deepseek.api_key,
             config.llm.deepseek.base_url,
             config.llm.deepseek.model,
-            None,
         ),
         crate::llm::LLMProvider::Minimax => (
             config.llm.minimax.api_key,
             "https://api.minimax.chat/v1".to_string(),
             config.llm.minimax.model,
-            Some(config.llm.minimax.group_id),
         ),
         crate::llm::LLMProvider::Kimi => (
             config.llm.kimi.api_key,
             "https://api.moonshot.cn/v1".to_string(),
             config.llm.kimi.model,
-            None,
         ),
     };
     
@@ -156,7 +152,6 @@ pub fn get_llm_config() -> Result<LLMConfig, String> {
         temperature: config.llm.temperature,
         max_tokens: config.llm.max_tokens,
         stream: config.llm.stream,
-        group_id,
     })
 }
 

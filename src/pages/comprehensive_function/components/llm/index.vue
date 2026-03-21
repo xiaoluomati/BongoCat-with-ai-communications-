@@ -11,7 +11,6 @@ import ProListItem from '@/components/pro-list-item/index.vue'
 const enabled = ref(false)
 const provider = ref('deepseek')
 const apiKey = ref('')
-const groupId = ref('')  // Minimax 需要 group_id
 const model = ref('deepseek-chat')
 const temperature = ref(0.8)
 const maxTokens = ref(500)
@@ -49,7 +48,6 @@ const modelOptions: Record<string, { value: string; label: string }[]> = {
 }
 
 const currentModels = () => modelOptions[provider.value] || modelOptions.deepseek
-const isMinimax = () => provider.value === 'minimax'
 
 // Load config on mount
 onMounted(async () => {
@@ -77,16 +75,10 @@ async function loadProviderConfig() {
     if (providerConfig) {
       apiKey.value = providerConfig.api_key || ''
       model.value = providerConfig.model || defaultModels[provider.value]
-      
-      // Minimax 特殊处理
-      if (provider.value === 'minimax') {
-        groupId.value = providerConfig.group_id || ''
-      }
     } else {
       // 使用默认值
       apiKey.value = ''
       model.value = defaultModels[provider.value]
-      groupId.value = ''
     }
   } catch (err) {
     console.error('Failed to load provider config:', err)
@@ -116,11 +108,6 @@ async function saveConfig() {
     config.llm[provider.value] = config.llm[provider.value] || {}
     config.llm[provider.value].api_key = apiKey.value
     config.llm[provider.value].model = model.value
-    
-    // Minimax 需要 group_id
-    if (provider.value === 'minimax') {
-      config.llm[provider.value].group_id = groupId.value
-    }
     
     await invoke('save_config', { config })
     message.success('配置已保存')
@@ -192,7 +179,7 @@ function onProviderChange() {
       <!-- API Key -->
       <ProListItem
         v-if="enabled"
-        :description="isMinimax() ? '请输入 MiniMax API Key' : '请输入 API Key'"
+        description="请输入 API Key"
         title="API Key"
       >
         <Input
@@ -200,19 +187,6 @@ function onProviderChange() {
           class="w-60"
           placeholder="输入 API Key"
           type="password"
-        />
-      </ProListItem>
-
-      <!-- Group ID (仅 Minimax) -->
-      <ProListItem
-        v-if="enabled && isMinimax()"
-        description="MiniMax 需要 Group ID"
-        title="Group ID"
-      >
-        <Input
-          v-model:value="groupId"
-          class="w-60"
-          placeholder="输入 Group ID"
         />
       </ProListItem>
 

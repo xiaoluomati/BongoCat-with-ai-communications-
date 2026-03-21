@@ -43,7 +43,6 @@ pub struct LLMConfig {
     pub temperature: f32,
     pub max_tokens: u32,
     pub stream: bool,
-    pub group_id: Option<String>,
 }
 
 impl Default for LLMConfig {
@@ -56,7 +55,6 @@ impl Default for LLMConfig {
             temperature: 0.8,
             max_tokens: 500,
             stream: false,
-            group_id: None,
         }
     }
 }
