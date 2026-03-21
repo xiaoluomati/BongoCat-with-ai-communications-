@@ -72,6 +72,9 @@ pub fn sync_chat_window_position(app: &tauri::AppHandle) -> Result<(), String> {
     let main_pos = main_window.outer_position().map_err(|e| e.to_string())?;
     let main_size = main_window.outer_size().map_err(|e| e.to_string())?;
 
+    // 获取聊天窗口当前位置
+    let chat_pos = chat_window.outer_position().map_err(|e| e.to_string())?;
+
     // 获取所有可用显示器
     let monitors = main_window
         .available_monitors()
@@ -90,29 +93,31 @@ pub fn sync_chat_window_position(app: &tauri::AppHandle) -> Result<(), String> {
     let monitor_pos = monitor.position();
     let monitor_size = monitor.size();
 
-    // 计算主窗口中心点相对于当前显示器的坐标
-    let relative_center_x = pet_center_x - monitor_pos.x;
-    let monitor_center_x = monitor_size.width as i32 / 2;
+    // 判断聊天窗口当前在主窗口的哪一侧
+    let chat_center_x = chat_pos.x + CHAT_WINDOW_WIDTH / 2;
+    let is_chat_on_left = chat_center_x < pet_center_x;
 
-    // 根据主窗口在当前显示器中的位置决定聊天窗口显示在哪一侧
-    let chat_x = if relative_center_x < monitor_center_x {
-        // 主窗口在当前显示器左侧，聊天窗口放在右侧
-        main_pos.x + main_size.width as i32 + WINDOW_GAP
+    // 根据当前位置计算新的聊天窗口位置，保持间距避免重叠
+    let chat_x = if is_chat_on_left {
+        // 聊天窗口在左侧：放在主窗口左边，保持间距
+        // 如果主窗口向左移动接近聊天窗口，聊天窗口也向左移动保持间距
+        let desired_x = main_pos.x - CHAT_WINDOW_WIDTH - WINDOW_GAP;
+        // 确保不超出显示器左边界
+        desired_x.max(monitor_pos.x)
     } else {
-        // 主窗口在当前显示器右侧，聊天窗口放在左侧
-        main_pos.x - CHAT_WINDOW_WIDTH - WINDOW_GAP
+        // 聊天窗口在右侧：放在主窗口右边，保持间距
+        let desired_x = main_pos.x + main_size.width as i32 + WINDOW_GAP;
+        // 确保不超出显示器右边界
+        let max_x = monitor_pos.x + monitor_size.width as i32 - CHAT_WINDOW_WIDTH;
+        desired_x.min(max_x)
     };
 
     // 垂直居中
     let chat_y = main_pos.y + (main_size.height as i32 - CHAT_WINDOW_HEIGHT) / 2;
 
     // 边界检查，确保在当前显示器范围内
-    let min_x = monitor_pos.x;
-    let max_x = monitor_pos.x + monitor_size.width as i32 - CHAT_WINDOW_WIDTH;
     let min_y = monitor_pos.y;
     let max_y = monitor_pos.y + monitor_size.height as i32 - CHAT_WINDOW_HEIGHT;
-
-    let chat_x = chat_x.max(min_x).min(max_x);
     let chat_y = chat_y.max(min_y).min(max_y);
 
     chat_window
@@ -121,9 +126,6 @@ pub fn sync_chat_window_position(app: &tauri::AppHandle) -> Result<(), String> {
             y: chat_y,
         }))
         .map_err(|e| e.to_string())?;
-
-    // 确保聊天窗口在顶层，防止被主窗口覆盖
-    chat_window.set_always_on_top(true).ok();
 
     Ok(())
 }
