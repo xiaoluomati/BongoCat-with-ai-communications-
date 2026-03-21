@@ -122,6 +122,9 @@ pub fn sync_chat_window_position(app: &tauri::AppHandle) -> Result<(), String> {
         }))
         .map_err(|e| e.to_string())?;
 
+    // 确保聊天窗口在顶层，防止被主窗口覆盖
+    chat_window.set_always_on_top(true).ok();
+
     Ok(())
 }
 
