@@ -1,5 +1,6 @@
 //! Window Management Commands
 
+use std::process::Command;
 use tauri::Manager;
 use crate::window_follower::{set_chat_visible, enable_follow, disable_follow, sync_chat_window_position};
 
@@ -145,6 +146,26 @@ pub fn toggle_chat_window(app: tauri::AppHandle) -> Result<bool, String> {
         
         Ok(true)
     }
+}
+
+/// Exit the application
+#[tauri::command]
+pub fn exit_app(code: i32) {
+    std::process::exit(code);
+}
+
+/// Relaunch the application
+#[tauri::command]
+pub fn relaunch_app(_app: tauri::AppHandle) -> Result<(), String> {
+    let app_path = std::env::current_exe().map_err(|e| e.to_string())?;
+    
+    // Spawn a new process and exit the current one
+    Command::new(app_path)
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    
+    // Exit the current process
+    std::process::exit(0);
 }
 
 /// Set chat window always on top

@@ -18,16 +18,10 @@ export interface GeneralStore {
     isDark: boolean
     language?: Language
   }
-  update: {
-    autoCheck: boolean
-  }
 }
 
 export const useGeneralStore = defineStore('general', () => {
   /* ------------ 废弃字段（后续删除） ------------ */
-
-  /** @deprecated 请使用 `update.autoCheck` */
-  const autoCheckUpdate = ref(false)
 
   /** @deprecated 请使用 `app.autostart` */
   const autostart = ref(false)
@@ -54,10 +48,6 @@ export const useGeneralStore = defineStore('general', () => {
     isDark: false,
   })
 
-  const update = reactive<GeneralStore['update']>({
-    autoCheck: false,
-  })
-
   const getLanguage = async () => {
     const locale = await getLocale<Language>()
 
@@ -79,8 +69,6 @@ export const useGeneralStore = defineStore('general', () => {
     appearance.theme = theme.value
     appearance.isDark = isDark.value
 
-    update.autoCheck = autoCheckUpdate.value
-
     migrated.value = true
   }
 
@@ -90,7 +78,6 @@ export const useGeneralStore = defineStore('general', () => {
     migrated,
     app,
     appearance,
-    update,
     init,
     musicPlayerPosition,
     musicPlayerSize,

@@ -20,7 +20,6 @@
     "core:window:allow-show",
     "custom-window:default",
     "os:default",
-    "process:default",
     "opener:default",
     {
       "identifier": "opener:allow-open-path",
