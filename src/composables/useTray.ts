@@ -1,15 +1,12 @@
 import type { TrayIconOptions } from '@tauri-apps/api/tray'
 
 import { getName, getVersion } from '@tauri-apps/api/app'
-import { Menu, MenuItem, PredefinedMenuItem, Submenu, CheckMenuItem } from '@tauri-apps/api/menu'
+import { invoke } from '@tauri-apps/api/core'
+import { Menu, MenuItem, PredefinedMenuItem } from '@tauri-apps/api/menu'
 import { resolveResource } from '@tauri-apps/api/path'
 import { TrayIcon } from '@tauri-apps/api/tray'
-import { exit, relaunch } from '@tauri-apps/plugin-process'
 import { watchDebounced } from '@vueuse/core'
 import { watch } from 'vue'
-import { range } from 'es-toolkit'
-
-import { showWindow } from '../plugins/window'
 
 import { useSharedMenu } from './useSharedMenu'
 
@@ -72,7 +69,7 @@ export function useTray() {
   const getTrayMenu = async () => {
     const appVersion = await getVersion()
     const sharedItems = await getSharedMenuItems()
-    
+
     const items = [
       ...sharedItems,
       await PredefinedMenuItem.new({ item: 'Separator' }),
@@ -84,12 +81,12 @@ export function useTray() {
       await MenuItem.new({
         id: 'tray-restart',
         text: '🔄 重启应用',
-        action: relaunch,
+        action: () => invoke('relaunch_app'),
       }),
       await MenuItem.new({
         id: 'tray-quit',
         text: '❌ 退出应用',
-        action: () => exit(0),
+        action: () => invoke('exit_app', { code: 0 }),
       }),
     ]
 

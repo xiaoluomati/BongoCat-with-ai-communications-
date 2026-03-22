@@ -11,7 +11,7 @@ use commands::{
     get_memory_info, get_monthly_summaries, get_today_chat, get_weekly_summaries,
     hide_chat_window, load_config, save_chat_message, save_config, save_monthly_summary,
     save_weekly_summary, send_message, set_system_prompt, show_chat_window, toggle_chat_window,
-    set_chat_always_on_top, activate_window,
+    set_chat_always_on_top, activate_window, exit_app, relaunch_app,
     trigger_monthly_summary, trigger_weekly_summary, trigger_quarter, trigger_year,
     ChatState, start_scheduler,
     load_character, list_characters, save_character, delete_character,
@@ -112,6 +112,8 @@ pub fn run() {
             toggle_chat_window,
             set_chat_always_on_top,
             activate_window,
+            exit_app,
+            relaunch_app,
             save_chat_message,
             get_today_chat,
             get_chat_by_date,
@@ -140,7 +142,6 @@ pub fn run() {
         .manage(Arc::new(RwLock::new(ChatState::default())))
         .plugin(tauri_plugin_custom_window::init())
         .plugin(tauri_plugin_os::init())
-        .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_pinia::init())
         .plugin(prevent_default::init())

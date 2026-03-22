@@ -23,7 +23,11 @@ pub use memory::{
 
 pub use prompt::*;
 pub use scheduler::{start_scheduler, trigger_weekly_summary, trigger_monthly_summary, trigger_quarter, trigger_year};
-pub use window::*;
+pub use window::{
+    activate_window, get_main_window_position, 
+    show_chat_window, hide_chat_window, toggle_chat_window, set_chat_always_on_top,
+    exit_app, relaunch_app
+};
 
 // Character - explicit export to avoid conflict with config
 pub use character::{UserProfile, CharacterBrief, get_user_profile, save_user_profile, check_and_update_profile, trigger_profile_update, get_current_character, switch_character, list_character_briefs};

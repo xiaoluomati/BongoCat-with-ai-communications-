@@ -441,7 +441,7 @@ dependencies = [
 
 [[package]]
 name = "bongo-cat"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "chrono",
  "dirs 6.0.0",
@@ -469,7 +469,6 @@ dependencies = [
  "tauri-plugin-os",
  "tauri-plugin-pinia",
  "tauri-plugin-prevent-default",
- "tauri-plugin-process",
  "tauri-plugin-single-instance",
  "thiserror 2.0.12",
  "tokio",
@@ -5212,16 +5211,6 @@ dependencies = [
  "tauri",
  "tauri-plugin",
  "thiserror 2.0.12",
-]
-
-[[package]]
-name = "tauri-plugin-process"
-version = "2.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "57da5888533e802b6206b9685091f8714aa1f5266dc80051a82388449558b773"
-dependencies = [
- "tauri",
- "tauri-plugin",
 ]
 
 [[package]]
