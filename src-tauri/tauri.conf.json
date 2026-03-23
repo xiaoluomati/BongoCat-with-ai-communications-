@@ -1,0 +1,96 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "BongoCat",
+  "version": "../package.json",
+  "identifier": "com.ayangweb.BongoCat",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "macOSPrivateApi": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "BongoCat",
+        "url": "index.html/#/",
+        "shadow": false,
+        "alwaysOnTop": true,
+        "transparent": true,
+        "decorations": false,
+        "acceptFirstMouse": true,
+        "skipTaskbar": true
+      },
+      {
+        "label": "preference",
+        "url": "index.html/#/preference",
+        "visible": false,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "minWidth": 800,
+        "minHeight": 600
+      },
+      {
+        "label": "comprehensive_function",
+        "url": "index.html/#/comprehensive_function",
+        "visible": false,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "minWidth": 800,
+        "minHeight": 600
+      },
+      {
+        "label": "chat",
+        "url": "index.html/#/chat",
+        "shadow": false,
+        "alwaysOnTop": true,
+        "transparent": true,
+        "decorations": false,
+        "width": 500,
+        "height": 700,
+        "visible": false,
+        "skipTaskbar": true
+      }
+    ],
+    "security": {
+      "csp": null,
+      "dangerousDisableAssetCspModification": true,
+      "assetProtocol": {
+        "enable": true,
+        "scope": {
+          "allow": ["**/*"],
+          "requireLiteralLeadingDot": false
+        }
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "category": "Entertainment",
+    "targets": ["nsis", "dmg", "app", "appimage", "deb", "rpm"],
+    "shortDescription": "BongoCat",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "resources": ["assets/tray.png", "assets/models"]
+  },
+  "plugins": {
+    "updater": {
+      "dangerousInsecureTransportProtocol": true,
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDFDNDIwNTQ4QUNEMDY0RDQKUldUVVpOQ3NTQVZDSFBnRzgwV0hCZjdEM25JVHg0Ynp6U2VCMFhqdXRyUUd4aEdBbjVhOHRzZ1QK",
+      "endpoints": [
+        "http://api.upgrade.toolsetlink.com/v1/tauri/upgrade?tauriKey=KtGlsZUVXmWfjkRKCuqpfw&versionName={{current_version}}&target={{target}}&arch={{arch}}&appointVersionName=&devModelKey=&devKey=",
+        "https://gh-proxy.com/github.com/ayangweb/BongoCat/releases/latest/download/latest.json"
+      ]
+    },
+    "fs": {
+      "requireLiteralLeadingDot": false
+    }
+  }
+}

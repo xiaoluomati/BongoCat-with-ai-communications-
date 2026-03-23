@@ -1,0 +1,225 @@
+// Memory Management Commands
+use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::PathBuf;
+use chrono::Local;
+
+fn get_app_data_dir() -> PathBuf {
+    // Use system data directory instead of project directory to avoid Tauri dev watcher issues
+    // Windows: %APPDATA%/BongoCat/data
+    // macOS: ~/Library/Application Support/com.ayangweb.BongoCat/data
+    // Linux: ~/.local/share/BongoCat/data
+    dirs::data_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("BongoCat")
+        .join("data")
+}
+
+fn get_data_dir() -> PathBuf { get_app_data_dir() }
+fn get_memory_dir() -> PathBuf { get_data_dir().join("memory") }
+fn get_chat_dir() -> PathBuf { get_memory_dir().join("chat") }
+fn get_weekly_dir() -> PathBuf { get_memory_dir().join("weekly") }
+fn get_monthly_dir() -> PathBuf { get_memory_dir().join("monthly") }
+fn get_quarterly_dir() -> PathBuf { get_memory_dir().join("quarterly") }
+fn get_yearly_dir() -> PathBuf { get_memory_dir().join("yearly") }
+
+fn ensure_dirs() -> Result<(), String> {
+    fs::create_dir_all(get_chat_dir()).map_err(|e| e.to_string())?;
+    fs::create_dir_all(get_weekly_dir()).map_err(|e| e.to_string())?;
+    fs::create_dir_all(get_monthly_dir()).map_err(|e| e.to_string())?;
+    fs::create_dir_all(get_quarterly_dir()).map_err(|e| e.to_string())?;
+    fs::create_dir_all(get_yearly_dir()).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ChatMessage { pub id: String, pub role: String, pub content: String, pub timestamp: i64 }
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DayChat { pub date: String, pub messages: Vec<ChatMessage> }
+#[derive(Debug, Serialize, Deserialize)]
+pub struct WeeklySummary { pub week: String, pub date_range: String, pub keywords: Vec<String>, pub emotion_arc: Vec<String>, pub summary: String, pub important_events: Vec<String>, pub chat_count: i32 }
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MonthlySummary { pub month: String, pub emotion_distribution: std::collections::HashMap<String, i32>, pub topics: Vec<String>, pub relationship_growth: String, pub milestones: Vec<String> }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct QuarterlySummary { pub quarter: String, pub date_range: String, pub keywords: Vec<String>, pub summary: String, pub important_events: Vec<String>, pub milestone: String }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct YearlySummary { pub year: String, pub keywords: Vec<String>, pub summary: String, pub relationship_growth: String, pub milestones: Vec<String>, pub memorable_moments: Vec<String> }
+
+fn get_today() -> String { Local::now().format("%Y-%m-%d").to_string() }
+
+#[tauri::command]
+pub fn save_chat_message(message: ChatMessage) -> Result<(), String> {
+    ensure_dirs()?;
+    let today = get_today();
+    let file_path = get_chat_dir().join(format!("{}.json", today));
+    let mut day_chat = if file_path.exists() {
+        let content = fs::read_to_string(&file_path).map_err(|e| e.to_string())?;
+        serde_json::from_str::<DayChat>(&content).unwrap_or(DayChat { date: today.clone(), messages: vec![] })
+    } else { DayChat { date: today.clone(), messages: vec![] } };
+    day_chat.messages.push(message);
+    let content = serde_json::to_string_pretty(&day_chat).map_err(|e| e.to_string())?;
+    fs::write(&file_path, content).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_today_chat() -> Result<DayChat, String> {
+    let today = get_today();
+    let file_path = get_chat_dir().join(format!("{}.json", today));
+    if !file_path.exists() { return Ok(DayChat { date: today, messages: vec![] }); }
+    let content = fs::read_to_string(&file_path).map_err(|e| e.to_string())?;
+    serde_json::from_str(&content).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_chat_by_date(date: String) -> Result<DayChat, String> {
+    let file_path = get_chat_dir().join(format!("{}.json", date));
+    if !file_path.exists() { return Ok(DayChat { date, messages: vec![] }); }
+    let content = fs::read_to_string(&file_path).map_err(|e| e.to_string())?;
+    serde_json::from_str(&content).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_chat_dates() -> Result<Vec<String>, String> {
+    let chat_dir = get_chat_dir();
+    if !chat_dir.exists() { return Ok(vec![]); }
+    let mut dates: Vec<String> = fs::read_dir(&chat_dir).map_err(|e| e.to_string())?
+        .filter_map(|entry| { let name = entry.ok()?.file_name().to_str()?.to_string(); if name.ends_with(".json") { Some(name.trim_end_matches(".json").to_string()) } else { None } })
+        .collect();
+    dates.sort_by(|a, b| b.cmp(a));
+    Ok(dates)
+}
+
+#[tauri::command]
+pub fn save_weekly_summary(summary: WeeklySummary) -> Result<(), String> {
+    ensure_dirs()?;
+    let file_path = get_weekly_dir().join(format!("{}.json", summary.week));
+    let content = serde_json::to_string_pretty(&summary).map_err(|e| e.to_string())?;
+    fs::write(&file_path, content).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_weekly_summaries() -> Result<Vec<WeeklySummary>, String> {
+    let dir = get_weekly_dir();
+    if !dir.exists() { return Ok(vec![]); }
+    let mut summaries: Vec<WeeklySummary> = fs::read_dir(&dir).map_err(|e| e.to_string())?
+        .filter_map(|entry| { let path = entry.ok()?.path(); if path.extension().and_then(|s| s.to_str()) == Some("json") { let content = fs::read_to_string(&path).ok()?; serde_json::from_str::<WeeklySummary>(&content).ok() } else { None } })
+        .collect();
+    summaries.sort_by(|a, b| b.week.cmp(&a.week));
+    Ok(summaries)
+}
+
+#[tauri::command]
+pub fn save_monthly_summary(summary: MonthlySummary) -> Result<(), String> {
+    ensure_dirs()?;
+    let file_path = get_monthly_dir().join(format!("{}.json", summary.month));
+    let content = serde_json::to_string_pretty(&summary).map_err(|e| e.to_string())?;
+    fs::write(&file_path, content).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_monthly_summaries() -> Result<Vec<MonthlySummary>, String> {
+    let dir = get_monthly_dir();
+    if !dir.exists() { return Ok(vec![]); }
+    let mut summaries: Vec<MonthlySummary> = fs::read_dir(&dir).map_err(|e| e.to_string())?
+        .filter_map(|entry| { let path = entry.ok()?.path(); if path.extension().and_then(|s| s.to_str()) == Some("json") { let content = fs::read_to_string(&path).ok()?; serde_json::from_str::<MonthlySummary>(&content).ok() } else { None } })
+        .collect();
+    summaries.sort_by(|a, b| b.month.cmp(&a.month));
+    Ok(summaries)
+}
+
+#[tauri::command]
+pub fn export_all_chats() -> Result<String, String> {
+    let chat_dir = get_chat_dir();
+    if !chat_dir.exists() { return Ok("{}".to_string()); }
+    let mut all_chats: std::collections::HashMap<String, DayChat> = std::collections::HashMap::new();
+    for entry in fs::read_dir(&chat_dir).map_err(|e| e.to_string())? {
+        let path = entry.map_err(|e| e.to_string())?.path();
+        if path.extension().and_then(|s| s.to_str()) == Some("json") {
+            let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+            if let Ok(day_chat) = serde_json::from_str::<DayChat>(&content) { all_chats.insert(day_chat.date.clone(), day_chat); }
+        }
+    }
+    serde_json::to_string_pretty(&all_chats).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn export_chats_markdown() -> Result<String, String> {
+    let chat_dir = get_chat_dir();
+    if !chat_dir.exists() { return Ok("# 无聊天记录\n\n暂无聊天记录".to_string()); }
+    let mut dates: Vec<String> = fs::read_dir(&chat_dir).map_err(|e| e.to_string())?
+        .filter_map(|entry| { let name = entry.ok()?.file_name().to_str()?.to_string(); if name.ends_with(".json") { Some(name.trim_end_matches(".json").to_string()) } else { None } })
+        .collect();
+    dates.sort_by(|a, b| b.cmp(a));
+    let mut md = String::from("# 聊天记录\n\n");
+    for date in dates.iter().take(30) {
+        let file_path = chat_dir.join(format!("{}.json", date));
+        let content = fs::read_to_string(&file_path).map_err(|e| e.to_string())?;
+        let day_chat: DayChat = serde_json::from_str(&content).map_err(|e| e.to_string())?;
+        if day_chat.messages.is_empty() { continue; }
+        md.push_str(&format!("## {}\n\n", date));
+        for msg in day_chat.messages { let role = if msg.role == "user" { "用户" } else { "Bongo Cat" }; md.push_str(&format!("**{}**: {}\n\n", role, msg.content)); }
+    }
+    Ok(md)
+}
+
+#[tauri::command]
+pub fn clear_all_chats() -> Result<(), String> {
+    let chat_dir = get_chat_dir();
+    if chat_dir.exists() { fs::remove_dir_all(&chat_dir).map_err(|e| e.to_string())?; }
+    ensure_dirs()?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_memory_info() -> Result<serde_json::Value, String> {
+    let chat_dir = get_chat_dir(); let weekly_dir = get_weekly_dir(); let monthly_dir = get_monthly_dir();
+    let chat_count = if chat_dir.exists() { fs::read_dir(&chat_dir).map_err(|e| e.to_string())?.count() } else { 0 };
+    let weekly_count = if weekly_dir.exists() { fs::read_dir(&weekly_dir).map_err(|e| e.to_string())?.count() } else { 0 };
+    let monthly_count = if monthly_dir.exists() { fs::read_dir(&monthly_dir).map_err(|e| e.to_string())?.count() } else { 0 };
+    Ok(serde_json::json!({ "chat_days": chat_count, "weekly_summaries": weekly_count, "monthly_summaries": monthly_count, "storage_path": get_memory_dir().to_string_lossy() }))
+}
+
+#[tauri::command]
+pub fn save_quarterly_summary(summary: QuarterlySummary) -> Result<(), String> {
+    ensure_dirs()?;
+    let file_path = get_quarterly_dir().join(format!("{}.json", summary.quarter));
+    let content = serde_json::to_string_pretty(&summary).map_err(|e| e.to_string())?;
+    fs::write(&file_path, content).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_quarterly_summaries() -> Result<Vec<QuarterlySummary>, String> {
+    let dir = get_quarterly_dir();
+    if !dir.exists() { return Ok(vec![]); }
+    let mut summaries: Vec<QuarterlySummary> = fs::read_dir(&dir).map_err(|e| e.to_string())?
+        .filter_map(|entry| { let path = entry.ok()?.path(); if path.extension().and_then(|s| s.to_str()) == Some("json") { let content = fs::read_to_string(&path).ok()?; serde_json::from_str::<QuarterlySummary>(&content).ok() } else { None } })
+        .collect();
+    summaries.sort_by(|a, b| b.quarter.cmp(&a.quarter));
+    Ok(summaries)
+}
+
+#[tauri::command]
+pub fn save_yearly_summary(summary: YearlySummary) -> Result<(), String> {
+    ensure_dirs()?;
+    let file_path = get_yearly_dir().join(format!("{}.json", summary.year));
+    let content = serde_json::to_string_pretty(&summary).map_err(|e| e.to_string())?;
+    fs::write(&file_path, content).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_yearly_summaries() -> Result<Vec<YearlySummary>, String> {
+    let dir = get_yearly_dir();
+    if !dir.exists() { return Ok(vec![]); }
+    let mut summaries: Vec<YearlySummary> = fs::read_dir(&dir).map_err(|e| e.to_string())?
+        .filter_map(|entry| { let path = entry.ok()?.path(); if path.extension().and_then(|s| s.to_str()) == Some("json") { let content = fs::read_to_string(&path).ok()?; serde_json::from_str::<YearlySummary>(&content).ok() } else { None } })
+        .collect();
+    summaries.sort_by(|a, b| b.year.cmp(&a.year));
+    Ok(summaries)
+}

@@ -1,0 +1,23 @@
+{
+  "date": "2026-03-14",
+  "messages": [
+    {
+      "id": "msg_1773498820408",
+      "role": "user",
+      "content": "你好",
+      "timestamp": 1773498820408
+    },
+    {
+      "id": "msg_1773498856527",
+      "role": "user",
+      "content": "你好",
+      "timestamp": 1773498856527
+    },
+    {
+      "id": "msg_1773498890049",
+      "role": "user",
+      "content": "你好",
+      "timestamp": 1773498890049
+    }
+  ]
+}

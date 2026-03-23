@@ -1,0 +1,35 @@
+{
+  "template_version": "1.0",
+  
+  "system_prompt_template": "{role_preset}\n\n{user_profile}\n\n{long_term_memory}\n\n{短期记忆}\n\n当前对话：",
+  
+  "components": {
+    "role_preset": {
+      "enabled": true,
+      "description": "角色预设 - 定义角色的核心性格和行为"
+    },
+    "user_profile": {
+      "enabled": true,
+      "description": "用户画像 - 从对话中自动学习到的用户信息",
+      "prompt": "## 用户信息\n{user_info}"
+    },
+    "long_term_memory": {
+      "enabled": true,
+      "description": "长期记忆 - 月度内的周/月总结",
+      "prompt": "## 近期记忆\n{memory_summary}",
+      "max_weeks": 4
+    },
+    "short_term_memory": {
+      "enabled": true,
+      "description": "短期记忆 - 当天完整对话",
+      "prompt": "## 今日对话\n{chat_history}",
+      "max_messages": 20
+    }
+  },
+  
+  "summary_prompts": {
+    "weekly": "请分析以下一周的对话记录，生成简洁的周总结。\n\n要求：\n1. 提取 3-5 个关键词\n2. 描述情绪变化曲线\n3. 列出重要事件\n4. 用 2-3 句话总结本周\n\n## 对话记录\n{chat_logs}\n\n请按以下 JSON 格式输出：\n{{\"keywords\": [], \"emotion_arc\": [], \"summary\": \"\", \"important_events\": []}}",
+    
+    "monthly": "请分析本月的对话记录，生成月度总结。\n\n要求：\n1. 统计情绪分布\n2. 总结主要话题\n3. 描述关系变化\n4. 列出里程碑事件\n\n## 本月对话 + 周总结\n{weekly_summaries}\n\n请按以下 JSON 格式输出：\n{{\"emotion_distribution\": {{}}, \"topics\": [], \"relationship_growth\": \"\", \"milestones\": []}}"
+  }
+}
