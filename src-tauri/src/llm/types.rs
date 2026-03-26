@@ -72,6 +72,7 @@ pub enum LLMProvider {
     DeepSeek,
     Minimax,
     Kimi,
+    Ollama,
 }
 
 impl Default for LLMProvider {
@@ -86,6 +87,7 @@ impl std::fmt::Display for LLMProvider {
             LLMProvider::DeepSeek => write!(f, "deepseek"),
             LLMProvider::Minimax => write!(f, "minimax"),
             LLMProvider::Kimi => write!(f, "kimi"),
+            LLMProvider::Ollama => write!(f, "ollama"),
         }
     }
 }
