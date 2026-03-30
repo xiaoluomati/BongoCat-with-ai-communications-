@@ -11,6 +11,8 @@ import ProListItem from '@/components/pro-list-item/index.vue'
 const enabled = ref(false)
 const provider = ref('deepseek')
 const apiKey = ref('')
+const baseHost = ref('http://localhost')
+const basePort = ref(11434)
 const model = ref('deepseek-chat')
 const temperature = ref(0.8)
 const maxTokens = ref(500)
@@ -19,18 +21,26 @@ const testingConnection = ref(false)
 const connectionStatus = ref<'unknown' | 'success' | 'failed'>('unknown')
 
 const providers = [
+  { value: 'ollama', label: 'Ollama (本地)' },
   { value: 'deepseek', label: 'DeepSeek' },
   { value: 'minimax', label: 'MiniMax' },
   { value: 'kimi', label: 'Kimi (Moonshot)' },
 ]
 
 const defaultModels: Record<string, string> = {
+  ollama: 'llama2',
   deepseek: 'deepseek-chat',
   minimax: 'abab6.5s-chat',
   kimi: 'moonshot-v1-8k',
 }
 
 const modelOptions: Record<string, { value: string; label: string }[]> = {
+  ollama: [
+    { value: 'llama2', label: 'llama2' },
+    { value: 'llama3', label: 'llama3' },
+    { value: 'qwen2.5', label: 'qwen2.5' },
+    { value: 'deepseek-coder', label: 'deepseek-coder' },
+  ],
   deepseek: [
     { value: 'deepseek-chat', label: 'deepseek-chat' },
     { value: 'deepseek-reasoner', label: 'deepseek-reasoner' },
@@ -75,14 +85,36 @@ async function loadProviderConfig() {
     if (providerConfig) {
       apiKey.value = providerConfig.api_key || ''
       model.value = providerConfig.model || defaultModels[provider.value]
+      // 解析 base_url 为 host 和 port
+      const fullUrl = providerConfig.base_url || getDefaultBaseUrl() + ':' + getDefaultPort()
+      const match = fullUrl.match(/^(https?:\/\/[^:]+)(:(\d+))?$/)
+      if (match) {
+        baseHost.value = match[1]
+        basePort.value = match[3] ? parseInt(match[3]) : getDefaultPort()
+      } else {
+        baseHost.value = getDefaultBaseUrl()
+        basePort.value = getDefaultPort()
+      }
     } else {
       // 使用默认值
       apiKey.value = ''
       model.value = defaultModels[provider.value]
+      baseHost.value = getDefaultBaseUrl()
+      basePort.value = getDefaultPort()
     }
   } catch (err) {
     console.error('Failed to load provider config:', err)
   }
+}
+
+// 获取默认 base_url
+function getDefaultBaseUrl(): string {
+  return provider.value === 'ollama' ? 'http://localhost' : ''
+}
+
+// 获取默认端口
+function getDefaultPort(): number {
+  return provider.value === 'ollama' ? 11434 : 0
 }
 
 // 监听提供商变化
@@ -108,6 +140,8 @@ async function saveConfig() {
     config.llm[provider.value] = config.llm[provider.value] || {}
     config.llm[provider.value].api_key = apiKey.value
     config.llm[provider.value].model = model.value
+    // 拼接 host 和 port 为完整的 base_url
+    config.llm[provider.value].base_url = `${baseHost.value}:${basePort.value}`
     
     await invoke('save_config', { config })
     message.success('配置已保存')
@@ -148,6 +182,8 @@ async function testConnection() {
 // Watch provider change to update model list
 function onProviderChange() {
   model.value = defaultModels[provider.value]
+  baseHost.value = getDefaultBaseUrl()
+  basePort.value = getDefaultPort()
 }
 </script>
 
@@ -178,7 +214,7 @@ function onProviderChange() {
 
       <!-- API Key -->
       <ProListItem
-        v-if="enabled"
+        v-if="enabled && provider !== 'ollama'"
         description="请输入 API Key"
         title="API Key"
       >
@@ -188,6 +224,30 @@ function onProviderChange() {
           placeholder="输入 API Key"
           type="password"
         />
+      </ProListItem>
+
+      <!-- Base URL (仅 Ollama 显示) -->
+      <ProListItem
+        v-if="enabled && provider === 'ollama'"
+        description="Ollama 服务地址"
+        title="服务地址"
+      >
+        <div class="flex items-center gap-2">
+          <Input
+            v-model:value="baseHost"
+            class="w-40"
+            placeholder="http://localhost"
+          />
+          <span class="text-gray-500">:</span>
+          <InputNumber
+            v-model:value="basePort"
+            class="w-24"
+            :min="1"
+            :max="65535"
+            :step="1"
+            placeholder="11434"
+          />
+        </div>
       </ProListItem>
 
       <!-- Model -->

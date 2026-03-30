@@ -28,6 +28,7 @@ pub struct LLMConfigData {
     pub deepseek: ProviderConfig,
     pub minimax: MinimaxConfig,
     pub kimi: ProviderConfig,
+    pub ollama: ProviderConfig,
     pub temperature: f32,
     pub max_tokens: u32,
     pub stream: bool,
@@ -123,6 +124,7 @@ pub fn get_llm_config() -> Result<LLMConfig, String> {
         "deepseek" => crate::llm::LLMProvider::DeepSeek,
         "minimax" => crate::llm::LLMProvider::Minimax,
         "kimi" => crate::llm::LLMProvider::Kimi,
+        "ollama" => crate::llm::LLMProvider::Ollama,
         _ => crate::llm::LLMProvider::DeepSeek,
     };
     
@@ -141,6 +143,11 @@ pub fn get_llm_config() -> Result<LLMConfig, String> {
             config.llm.kimi.api_key,
             "https://api.moonshot.cn/v1".to_string(),
             config.llm.kimi.model,
+        ),
+        crate::llm::LLMProvider::Ollama => (
+            config.llm.ollama.api_key,
+            config.llm.ollama.base_url,
+            config.llm.ollama.model,
         ),
     };
     
