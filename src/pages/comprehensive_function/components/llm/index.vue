@@ -24,14 +24,12 @@ const providers = [
   { value: 'ollama', label: 'Ollama (本地)' },
   { value: 'deepseek', label: 'DeepSeek' },
   { value: 'minimax', label: 'MiniMax' },
-  { value: 'kimi', label: 'Kimi (Moonshot)' },
 ]
 
 const defaultModels: Record<string, string> = {
   ollama: 'llama2',
   deepseek: 'deepseek-chat',
   minimax: 'MiniMax-M2.7',
-  kimi: 'moonshot-v1-8k',
 }
 
 const modelOptions: Record<string, { value: string; label: string }[]> = {
@@ -53,11 +51,6 @@ const modelOptions: Record<string, { value: string; label: string }[]> = {
     { value: 'MiniMax-M2.1', label: 'MiniMax-M2.1 (编程)' },
     { value: 'MiniMax-M2.1-highspeed', label: 'MiniMax-M2.1-highspeed (极速版)' },
     { value: 'MiniMax-M2', label: 'MiniMax-M2 (编码/Agent)' },
-  ],
-  kimi: [
-    { value: 'moonshot-v1-8k', label: 'moonshot-v1-8k' },
-    { value: 'moonshot-v1-32k', label: 'moonshot-v1-32k' },
-    { value: 'moonshot-v1-128k', label: 'moonshot-v1-128k' },
   ],
 }
 
