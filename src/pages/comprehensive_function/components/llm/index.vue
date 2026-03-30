@@ -30,7 +30,7 @@ const providers = [
 const defaultModels: Record<string, string> = {
   ollama: 'llama2',
   deepseek: 'deepseek-chat',
-  minimax: 'abab6.5s-chat',
+  minimax: 'MiniMax-M2.7',
   kimi: 'moonshot-v1-8k',
 }
 
@@ -46,9 +46,13 @@ const modelOptions: Record<string, { value: string; label: string }[]> = {
     { value: 'deepseek-reasoner', label: 'deepseek-reasoner' },
   ],
   minimax: [
-    { value: 'abab6.5s-chat', label: 'abab6.5s-chat' },
-    { value: 'abab6-chat', label: 'abab6-chat' },
-    { value: 'abab5.5s-chat', label: 'abab5.5s-chat' },
+    { value: 'MiniMax-M2.7', label: 'MiniMax-M2.7 (推荐)' },
+    { value: 'MiniMax-M2.7-highspeed', label: 'MiniMax-M2.7-highspeed (极速版)' },
+    { value: 'MiniMax-M2.5', label: 'MiniMax-M2.5' },
+    { value: 'MiniMax-M2.5-highspeed', label: 'MiniMax-M2.5-highspeed (极速版)' },
+    { value: 'MiniMax-M2.1', label: 'MiniMax-M2.1 (编程)' },
+    { value: 'MiniMax-M2.1-highspeed', label: 'MiniMax-M2.1-highspeed (极速版)' },
+    { value: 'MiniMax-M2', label: 'MiniMax-M2 (编码/Agent)' },
   ],
   kimi: [
     { value: 'moonshot-v1-8k', label: 'moonshot-v1-8k' },
