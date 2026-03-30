@@ -4,13 +4,11 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 pub mod deepseek;
-pub mod kimi;
 pub mod minimax;
 pub mod ollama;
 pub mod types;
 
 pub use deepseek::DeepSeekClient;
-pub use kimi::KimiClient;
 pub use minimax::MinimaxClient;
 pub use ollama::OllamaClient;
 pub use types::{ChatMessage, ChatRequest, ChatResponse, LLMProvider};
@@ -65,7 +63,6 @@ impl Default for LLMConfig {
 pub struct LLMManager {
     deepseek_client: Arc<RwLock<Option<DeepSeekClient>>>,
     minimax_client: Arc<RwLock<Option<MinimaxClient>>>,
-    kimi_client: Arc<RwLock<Option<KimiClient>>>,
     ollama_client: Arc<RwLock<Option<OllamaClient>>>,
     config: LLMConfig,
 }
@@ -75,7 +72,6 @@ impl LLMManager {
         Self {
             deepseek_client: Arc::new(RwLock::new(None)),
             minimax_client: Arc::new(RwLock::new(None)),
-            kimi_client: Arc::new(RwLock::new(None)),
             ollama_client: Arc::new(RwLock::new(None)),
             config,
         }
@@ -98,14 +94,6 @@ impl LLMManager {
                     Some(self.config.model.clone()),
                 );
                 let mut lock = self.minimax_client.write().await;
-                *lock = Some(client);
-            }
-            LLMProvider::Kimi => {
-                let client = KimiClient::new(
-                    self.config.api_key.clone(),
-                    Some(self.config.model.clone()),
-                );
-                let mut lock = self.kimi_client.write().await;
                 *lock = Some(client);
             }
             LLMProvider::Ollama => {
@@ -134,14 +122,6 @@ impl LLMManager {
             }
             LLMProvider::Minimax => {
                 let lock = self.minimax_client.read().await;
-                if let Some(client) = lock.as_ref() {
-                    client.is_available().await
-                } else {
-                    false
-                }
-            }
-            LLMProvider::Kimi => {
-                let lock = self.kimi_client.read().await;
                 if let Some(client) = lock.as_ref() {
                     client.is_available().await
                 } else {
@@ -183,13 +163,6 @@ impl LLMManager {
                 })?;
                 client.chat(request).await
             }
-            LLMProvider::Kimi => {
-                let lock = self.kimi_client.read().await;
-                let client = lock.as_ref().ok_or_else(|| {
-                    LLMError::ProviderUnavailable("Kimi client not initialized".to_string())
-                })?;
-                client.chat(request).await
-            }
             LLMProvider::Ollama => {
                 let lock = self.ollama_client.read().await;
                 let client = lock.as_ref().ok_or_else(|| {
@@ -224,13 +197,6 @@ impl LLMManager {
                 let lock = self.minimax_client.read().await;
                 let client = lock.as_ref().ok_or_else(|| {
                     LLMError::ProviderUnavailable("Minimax client not initialized".to_string())
-                })?;
-                client.chat_stream(request, on_chunk).await
-            }
-            LLMProvider::Kimi => {
-                let lock = self.kimi_client.read().await;
-                let client = lock.as_ref().ok_or_else(|| {
-                    LLMError::ProviderUnavailable("Kimi client not initialized".to_string())
                 })?;
                 client.chat_stream(request, on_chunk).await
             }
