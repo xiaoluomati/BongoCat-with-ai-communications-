@@ -6,6 +6,7 @@ import { useI18n } from 'vue-i18n'
 
 import DrinkWater from './components/drink_water/index.vue'
 import Music from './components/music/index.vue'
+import TTS from './components/tts/index.vue'
 import LLM from './components/llm/index.vue'
 import Memory from './components/memory/index.vue'
 import Character from './components/character/index.vue'
@@ -40,6 +41,11 @@ const menus = computed(() => [
     label: 'AI 对话',
     icon: 'i-solar:chat-round-linear',
     component: LLM,
+  },
+  {
+    label: '语音设置',
+    icon: 'i-solar:speaker-linear',
+    component: TTS,
   },
   {
     label: '记忆管理',

@@ -2,6 +2,7 @@
 
 use crate::llm::LLMConfig;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
@@ -46,16 +47,45 @@ pub struct MinimaxConfig {
     pub model: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct TTSConfig {
-    pub enabled: bool,
-    pub provider: String,
-    pub indextts2: IndexTTS2Config,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VoiceConfig {
+    pub speaker: String,
+    pub emo: String,
+    pub weight: f32,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct IndexTTS2Config {
+impl Default for VoiceConfig {
+    fn default() -> Self {
+        Self {
+            speaker: "苏瑶".to_string(),
+            emo: "neutral".to_string(),
+            weight: 1.0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TTSConfig {
+    pub enabled: bool,
     pub base_url: String,
+    pub default_voice_id: String,
+    pub volume: i32,
+    pub speed: f32,
+    #[serde(default)]
+    pub voices: HashMap<String, VoiceConfig>,
+}
+
+impl Default for TTSConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            base_url: "http://localhost:9880".to_string(),
+            default_voice_id: "suyao".to_string(),
+            volume: 80,
+            speed: 1.0,
+            voices: HashMap::new(),
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
