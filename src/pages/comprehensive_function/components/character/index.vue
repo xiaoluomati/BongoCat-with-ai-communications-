@@ -68,10 +68,10 @@ function openCreateModal() {
 
 // Open edit modal
 async function openEditModal(char: CharacterBrief) {
-  console.log('Opening edit modal for:', char)
+  console.warn('Opening edit modal for:', char)
   try {
     const charData = await invoke<Character>('load_character', { id: char.id })
-    console.log('Loaded character data:', charData)
+    console.warn('Loaded character data:', charData)
     editingCharacter.value = charData
     isEditing.value = true
     isModalVisible.value = true

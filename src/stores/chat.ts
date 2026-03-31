@@ -75,8 +75,8 @@ export const useChatStore = defineStore('chat', () => {
         // Streaming mode: listen for chunks
         const streamingMessageId = `msg_${Date.now() + 1}`
         let streamingContent = ''
-        let unlistenChunk: UnlistenFn | null = null
-        let unlistenEnd: UnlistenFn | null = null
+        let _unlistenChunk: UnlistenFn | null = null
+        let _unlistenEnd: UnlistenFn | null = null
 
         // Create placeholder message
         const assistantMessage: ChatMessage = {

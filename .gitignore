@@ -21,3 +21,7 @@ target
 *.njsproj
 *.sln
 *.sw?
+
+# Sensitive data
+src-tauri/data/
+src-tauri/logs/

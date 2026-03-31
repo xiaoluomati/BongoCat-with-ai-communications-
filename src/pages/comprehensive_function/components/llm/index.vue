@@ -11,43 +11,57 @@ import ProListItem from '@/components/pro-list-item/index.vue'
 const enabled = ref(false)
 const provider = ref('deepseek')
 const apiKey = ref('')
+const baseHost = ref('http://localhost')
+const basePort = ref(11434)
 const model = ref('deepseek-chat')
 const temperature = ref(0.8)
 const maxTokens = ref(500)
 const stream = ref(false)
 const testingConnection = ref(false)
+const ollamaModels = ref<{ value: string; label: string }[]>([])
+const fetchingModels = ref(false)
 const connectionStatus = ref<'unknown' | 'success' | 'failed'>('unknown')
 
 const providers = [
+  { value: 'ollama', label: 'Ollama (本地)' },
   { value: 'deepseek', label: 'DeepSeek' },
   { value: 'minimax', label: 'MiniMax' },
-  { value: 'kimi', label: 'Kimi (Moonshot)' },
 ]
 
 const defaultModels: Record<string, string> = {
+  ollama: 'llama2',
   deepseek: 'deepseek-chat',
-  minimax: 'abab6.5s-chat',
-  kimi: 'moonshot-v1-8k',
+  minimax: 'MiniMax-M2.7',
 }
 
 const modelOptions: Record<string, { value: string; label: string }[]> = {
+  ollama: [
+    { value: 'llama2', label: 'llama2' },
+    { value: 'llama3', label: 'llama3' },
+    { value: 'qwen2.5', label: 'qwen2.5' },
+    { value: 'deepseek-coder', label: 'deepseek-coder' },
+  ],
   deepseek: [
     { value: 'deepseek-chat', label: 'deepseek-chat' },
     { value: 'deepseek-reasoner', label: 'deepseek-reasoner' },
   ],
   minimax: [
-    { value: 'abab6.5s-chat', label: 'abab6.5s-chat' },
-    { value: 'abab6-chat', label: 'abab6-chat' },
-    { value: 'abab5.5s-chat', label: 'abab5.5s-chat' },
-  ],
-  kimi: [
-    { value: 'moonshot-v1-8k', label: 'moonshot-v1-8k' },
-    { value: 'moonshot-v1-32k', label: 'moonshot-v1-32k' },
-    { value: 'moonshot-v1-128k', label: 'moonshot-v1-128k' },
+    { value: 'MiniMax-M2.7', label: 'MiniMax-M2.7 (推荐)' },
+    { value: 'MiniMax-M2.7-highspeed', label: 'MiniMax-M2.7-highspeed (极速版)' },
+    { value: 'MiniMax-M2.5', label: 'MiniMax-M2.5' },
+    { value: 'MiniMax-M2.5-highspeed', label: 'MiniMax-M2.5-highspeed (极速版)' },
+    { value: 'MiniMax-M2.1', label: 'MiniMax-M2.1 (编程)' },
+    { value: 'MiniMax-M2.1-highspeed', label: 'MiniMax-M2.1-highspeed (极速版)' },
+    { value: 'MiniMax-M2', label: 'MiniMax-M2 (编码/Agent)' },
   ],
 }
 
-const currentModels = () => modelOptions[provider.value] || modelOptions.deepseek
+const currentModels = () => {
+  if (provider.value === 'ollama' && ollamaModels.value.length > 0) {
+    return ollamaModels.value
+  }
+  return modelOptions[provider.value] || modelOptions.deepseek
+}
 
 // Load config on mount
 onMounted(async () => {
@@ -75,14 +89,36 @@ async function loadProviderConfig() {
     if (providerConfig) {
       apiKey.value = providerConfig.api_key || ''
       model.value = providerConfig.model || defaultModels[provider.value]
+      // 解析 base_url 为 host 和 port
+      const fullUrl = providerConfig.base_url || getDefaultBaseUrl() + ':' + getDefaultPort()
+      const match = fullUrl.match(/^(https?:\/\/[^:]+)(:(\d+))?$/)
+      if (match) {
+        baseHost.value = match[1]
+        basePort.value = match[3] ? parseInt(match[3]) : getDefaultPort()
+      } else {
+        baseHost.value = getDefaultBaseUrl()
+        basePort.value = getDefaultPort()
+      }
     } else {
       // 使用默认值
       apiKey.value = ''
       model.value = defaultModels[provider.value]
+      baseHost.value = getDefaultBaseUrl()
+      basePort.value = getDefaultPort()
     }
   } catch (err) {
     console.error('Failed to load provider config:', err)
   }
+}
+
+// 获取默认 base_url
+function getDefaultBaseUrl(): string {
+  return provider.value === 'ollama' ? 'http://localhost' : ''
+}
+
+// 获取默认端口
+function getDefaultPort(): number {
+  return provider.value === 'ollama' ? 11434 : 0
 }
 
 // 监听提供商变化
@@ -108,6 +144,8 @@ async function saveConfig() {
     config.llm[provider.value] = config.llm[provider.value] || {}
     config.llm[provider.value].api_key = apiKey.value
     config.llm[provider.value].model = model.value
+    // 拼接 host 和 port 为完整的 base_url
+    config.llm[provider.value].base_url = `${baseHost.value}:${basePort.value}`
     
     await invoke('save_config', { config })
     message.success('配置已保存')
@@ -145,9 +183,39 @@ async function testConnection() {
   }
 }
 
+// 获取 Ollama 模型列表
+async function fetchOllamaModels() {
+  if (provider.value !== 'ollama') return
+  
+  fetchingModels.value = true
+  try {
+    // 先保存当前配置以确保 base_url 正确
+    await saveConfig()
+    const models = await invoke<string[]>('get_ollama_models')
+    ollamaModels.value = models.map(m => ({ value: m, label: m }))
+    if (models.length > 0 && !models.includes(model.value)) {
+      model.value = models[0]
+    }
+  } catch (err) {
+    console.error('Failed to fetch Ollama models:', err)
+    message.error('获取模型列表失败: ' + err)
+  } finally {
+    fetchingModels.value = false
+  }
+}
+
 // Watch provider change to update model list
 function onProviderChange() {
   model.value = defaultModels[provider.value]
+  baseHost.value = getDefaultBaseUrl()
+  basePort.value = getDefaultPort()
+  
+  // 如果切换到 Ollama，获取模型列表
+  if (provider.value === 'ollama') {
+    fetchOllamaModels()
+  } else {
+    ollamaModels.value = []
+  }
 }
 </script>
 
@@ -178,7 +246,7 @@ function onProviderChange() {
 
       <!-- API Key -->
       <ProListItem
-        v-if="enabled"
+        v-if="enabled && provider !== 'ollama'"
         description="请输入 API Key"
         title="API Key"
       >
@@ -190,17 +258,52 @@ function onProviderChange() {
         />
       </ProListItem>
 
+      <!-- Base URL (仅 Ollama 显示) -->
+      <ProListItem
+        v-if="enabled && provider === 'ollama'"
+        description="Ollama 服务地址"
+        title="服务地址"
+      >
+        <div class="flex items-center gap-2">
+          <Input
+            v-model:value="baseHost"
+            class="w-40"
+            placeholder="http://localhost"
+          />
+          <span class="text-gray-500">:</span>
+          <InputNumber
+            v-model:value="basePort"
+            class="w-24"
+            :min="1"
+            :max="65535"
+            :step="1"
+            placeholder="11434"
+          />
+        </div>
+      </ProListItem>
+
       <!-- Model -->
       <ProListItem
         v-if="enabled"
         description="选择对话模型"
         title="模型"
       >
-        <Select
-          v-model:value="model"
-          class="w-48"
-          :options="currentModels()"
-        />
+        <div class="flex items-center gap-2">
+          <Select
+            v-model:value="model"
+            class="w-48"
+            :options="currentModels()"
+            :loading="fetchingModels && provider === 'ollama'"
+          />
+          <Button
+            v-if="provider === 'ollama'"
+            size="small"
+            :loading="fetchingModels"
+            @click="fetchOllamaModels"
+          >
+            刷新
+          </Button>
+        </div>
       </ProListItem>
 
       <!-- Temperature -->

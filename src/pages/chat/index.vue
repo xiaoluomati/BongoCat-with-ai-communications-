@@ -221,7 +221,7 @@ function formatTime(timestamp: number): string {
         <span>— 已加载全部历史消息 —</span>
       </div>
 
-      <template v-for="(msg, index) in chatStore.messages" :key="msg.id">
+      <template v-for="msg in chatStore.messages" :key="msg.id">
         <!-- 日期分隔线 -->
         <div v-if="msg.role === 'system' && msg.isDivider" class="date-divider">
           <span class="date-label">{{ msg.content }}</span>
