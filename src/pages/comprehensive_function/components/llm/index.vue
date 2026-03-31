@@ -18,6 +18,8 @@ const temperature = ref(0.8)
 const maxTokens = ref(500)
 const stream = ref(false)
 const testingConnection = ref(false)
+const ollamaModels = ref<{ value: string; label: string }[]>([])
+const fetchingModels = ref(false)
 const connectionStatus = ref<'unknown' | 'success' | 'failed'>('unknown')
 
 const providers = [
@@ -54,7 +56,12 @@ const modelOptions: Record<string, { value: string; label: string }[]> = {
   ],
 }
 
-const currentModels = () => modelOptions[provider.value] || modelOptions.deepseek
+const currentModels = () => {
+  if (provider.value === 'ollama' && ollamaModels.value.length > 0) {
+    return ollamaModels.value
+  }
+  return modelOptions[provider.value] || modelOptions.deepseek
+}
 
 // Load config on mount
 onMounted(async () => {
@@ -176,11 +183,39 @@ async function testConnection() {
   }
 }
 
+// 获取 Ollama 模型列表
+async function fetchOllamaModels() {
+  if (provider.value !== 'ollama') return
+  
+  fetchingModels.value = true
+  try {
+    // 先保存当前配置以确保 base_url 正确
+    await saveConfig()
+    const models = await invoke<string[]>('get_ollama_models')
+    ollamaModels.value = models.map(m => ({ value: m, label: m }))
+    if (models.length > 0 && !models.includes(model.value)) {
+      model.value = models[0]
+    }
+  } catch (err) {
+    console.error('Failed to fetch Ollama models:', err)
+    message.error('获取模型列表失败: ' + err)
+  } finally {
+    fetchingModels.value = false
+  }
+}
+
 // Watch provider change to update model list
 function onProviderChange() {
   model.value = defaultModels[provider.value]
   baseHost.value = getDefaultBaseUrl()
   basePort.value = getDefaultPort()
+  
+  // 如果切换到 Ollama，获取模型列表
+  if (provider.value === 'ollama') {
+    fetchOllamaModels()
+  } else {
+    ollamaModels.value = []
+  }
 }
 </script>
 
@@ -253,11 +288,22 @@ function onProviderChange() {
         description="选择对话模型"
         title="模型"
       >
-        <Select
-          v-model:value="model"
-          class="w-48"
-          :options="currentModels()"
-        />
+        <div class="flex items-center gap-2">
+          <Select
+            v-model:value="model"
+            class="w-48"
+            :options="currentModels()"
+            :loading="fetchingModels && provider === 'ollama'"
+          />
+          <Button
+            v-if="provider === 'ollama'"
+            size="small"
+            :loading="fetchingModels"
+            @click="fetchOllamaModels"
+          >
+            刷新
+          </Button>
+        </div>
       </ProListItem>
 
       <!-- Temperature -->

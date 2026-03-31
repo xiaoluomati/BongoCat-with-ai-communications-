@@ -6,7 +6,7 @@ pub mod window_follower;
 
 // Explicit imports to avoid glob re-export issues
 use commands::{
-    check_llm_available, clear_chat_history, clear_all_chats, export_all_chats, export_chats_markdown,
+    check_llm_available, get_ollama_models, clear_chat_history, clear_all_chats, export_all_chats, export_chats_markdown,
     get_chat_by_date, get_chat_dates, get_chat_history, get_llm_config, get_main_window_position,
     get_memory_info, get_monthly_summaries, get_today_chat, get_weekly_summaries,
     hide_chat_window, load_config, save_chat_message, save_config, save_monthly_summary,
@@ -96,7 +96,7 @@ pub fn run() {
             get_chat_history,
             clear_chat_history,
             set_system_prompt,
-            check_llm_available,
+            check_llm_available, get_ollama_models,
             load_character,
             list_characters,
             save_character,
