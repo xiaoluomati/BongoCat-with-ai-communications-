@@ -2,8 +2,9 @@
 
 use crate::commands::config::{load_config, VoiceConfig};
 use reqwest::Client;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
@@ -35,6 +36,19 @@ struct VoiceListResponse {
 #[derive(Debug, Deserialize)]
 struct EmotionListResponse {
     output: Vec<String>,
+}
+
+/// TTS Meta for a message
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TTSMeta {
+    pub audio_files: Vec<TTSAudioFile>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TTSAudioFile {
+    pub seq: u32,
+    pub path: String,
+    pub text: String,
 }
 
 /// Get TTS configuration
@@ -144,13 +158,91 @@ fn get_tts_cache_dir() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("."))
         .join("cache")
         .join("bongo-cat")
-        .join("tts");
+        .join("tts")
+        .join("cache");
     
     if !cache_dir.exists() {
         fs::create_dir_all(&cache_dir).ok();
     }
     
     cache_dir
+}
+
+/// Get the archive directory for TTS audio files
+fn get_tts_archive_dir() -> PathBuf {
+    let archive_dir = dirs::data_local_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("cache")
+        .join("bongo-cat")
+        .join("tts")
+        .join("archive");
+    
+    if !archive_dir.exists() {
+        fs::create_dir_all(&archive_dir).ok();
+    }
+    
+    archive_dir
+}
+
+/// Get today's date string
+fn get_today_date() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default();
+    
+    let secs_per_day: u64 = 24 * 60 * 60;
+    let days = now.as_secs() / secs_per_day;
+    
+    // Simple date calculation
+    let mut year: u64 = 1970;
+    let mut remaining_days = days;
+    
+    // Count years
+    loop {
+        let days_in_year: u64 = 365 + if is_leap_year(year) { 1 } else { 0 };
+        if remaining_days < days_in_year {
+            break;
+        }
+        remaining_days -= days_in_year;
+        year += 1;
+    }
+    
+    // Count months
+    let days_in_months: [u64; 12] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    let mut month: u64 = 1;
+    for days_in_month in days_in_months.iter() {
+        let dim = *days_in_month as u64;
+        if is_leap_year(year) && month == 2 {
+            if remaining_days < dim + 1 {
+                break;
+            }
+            remaining_days -= dim + 1;
+        } else if remaining_days < dim {
+            break;
+        } else {
+            remaining_days -= dim;
+        }
+        month += 1;
+    }
+    
+    let day = remaining_days + 1;
+    
+    format!("{:04}-{:02}-{:02}", year, month, day)
+}
+
+fn is_leap_year(year: u64) -> bool {
+    (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
+}
+
+/// Get archive path for a specific date
+fn get_archive_date_dir(date: &str) -> PathBuf {
+    let dir = get_tts_archive_dir().join(date);
+    if !dir.exists() {
+        fs::create_dir_all(&dir).ok();
+    }
+    dir
 }
 
 /// Generate cache key from text and voice parameters
@@ -164,12 +256,37 @@ fn generate_cache_key(text: &str, speaker: &str, emo: &str, emo_method: &str, sp
     format!("{:x}", hasher.finish())
 }
 
+/// Save audio to archive and return local path
+fn save_audio_to_archive(
+    audio_bytes: &[u8],
+    msg_id: &Option<String>,
+    seq: Option<u32>,
+) -> Result<String, String> {
+    let date = get_today_date();
+    let date_dir = get_archive_date_dir(&date);
+    
+    let filename = match (msg_id, seq) {
+        (Some(id), Some(s)) => format!("{}_{:03}.wav", id, s),
+        _ => {
+            use uuid::Uuid;
+            format!("{}.wav", Uuid::new_v4())
+        }
+    };
+    
+    let path = date_dir.join(&filename);
+    fs::write(&path, audio_bytes).map_err(|e| e.to_string())?;
+    
+    Ok(path.to_string_lossy().to_string())
+}
+
 /// Speak text using TTS
 /// Returns the audio URL for frontend to play
 #[tauri::command]
 pub async fn tts_speak(
     text: String,
     voice_id: Option<String>,
+    msg_id: Option<String>,  // Message ID to associate with this audio
+    seq: Option<u32>,       // Sequence number in the message
     _app_handle: tauri::AppHandle,
 ) -> Result<String, String> {
     let config = load_config()?;
@@ -214,89 +331,93 @@ pub async fn tts_speak(
         )
     };
     
-    // Check cache first
-    let cache_dir = get_tts_cache_dir();
-    let cache_key = generate_cache_key(&text, &speaker, &emo, &emo_method, speed);
-    let cache_path = cache_dir.join(format!("{}.wav", cache_key));
-    
-    let audio_url: String;
-    
-    if cache_path.exists() {
-        // Use cached file
-        audio_url = format!("file://{}", cache_path.to_string_lossy());
-    } else {
-        // Call IndexTTS API
-        let client = Client::builder()
-            .timeout(std::time::Duration::from_secs(60))
-            .build()
-            .map_err(|e| e.to_string())?;
+    // Check cache first (only for non-archived requests)
+    if msg_id.is_none() {
+        let cache_dir = get_tts_cache_dir();
+        let cache_key = generate_cache_key(&text, &speaker, &emo, &emo_method, speed);
+        let cache_path = cache_dir.join(format!("{}.wav", cache_key));
         
-        let url = format!("{}/run/submit_and_refresh", tts_config.base_url);
-        
-        // Parse emo text (remove .wav extension if present)
-        let emo_text = emo.replace(".wav", "");
-        
-        let request_body = json!({
-            "voices_dropdown": speaker,
-            "speed": speed,
-            "text": text,
-            "emo_control_method": emo_method,
-            "emo_weight": 0.8,
-            "emo_text": emo_text,
-            "emo_random": false,
-            "max_tokens": 100,
-            "do_sample": true,
-            "temperature": 0.7,
-            "top_p": 0.9,
-            "top_k": 50
-        });
-        
-        let response = client
-            .post(&url)
-            .json(&request_body)
-            .send()
-            .await
-            .map_err(|e| e.to_string())?;
-        
-        if !response.status().is_success() {
-            let status = response.status();
-            let error_text = response.text().await.unwrap_or_default();
-            return Err(format!("TTS API error ({}): {}", status, error_text));
-        }
-        
-        // Parse response to get audio URL
-        let result: SubmitResponse = response.json().await.map_err(|e| e.to_string())?;
-        
-        // Construct audio URL from path or url
-        audio_url = if let Some(output) = result.output {
-            if let Some(file_data) = output.output_1 {
-                if let Some(url) = file_data.url {
-                    url
-                } else if let Some(path) = file_data.path {
-                    // Construct URL from path
-                    format!("{}/file={}", tts_config.base_url.trim_end_matches('/'), path)
-                } else {
-                    return Err("No audio URL or path in response".to_string());
-                }
-            } else {
-                return Err("No output_1 in response".to_string());
-            }
-        } else {
-            return Err("No output in response".to_string());
-        };
-        
-        // Try to download and cache the audio
-        if let Ok(audio_response) = client.get(&audio_url).send().await {
-            if let Ok(bytes) = audio_response.bytes().await {
-                let _ = fs::write(&cache_path, &bytes);
-            }
+        if cache_path.exists() {
+            return Ok(format!("file://{}", cache_path.to_string_lossy()));
         }
     }
     
-    Ok(audio_url)
+    // Call IndexTTS API
+    let client = Client::builder()
+        .timeout(std::time::Duration::from_secs(60))
+        .build()
+        .map_err(|e| e.to_string())?;
+    
+    let url = format!("{}/run/submit_and_refresh", tts_config.base_url);
+    
+    // Parse emo text (remove .wav extension if present)
+    let emo_text = emo.replace(".wav", "");
+    
+    let request_body = json!({
+        "voices_dropdown": speaker,
+        "speed": speed,
+        "text": text,
+        "emo_control_method": emo_method,
+        "emo_weight": 0.8,
+        "emo_text": emo_text,
+        "emo_random": false,
+        "max_tokens": 100,
+        "do_sample": true,
+        "temperature": 0.7,
+        "top_p": 0.9,
+        "top_k": 50
+    });
+    
+    let response = client
+        .post(&url)
+        .json(&request_body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    
+    if !response.status().is_success() {
+        let status = response.status();
+        let error_text = response.text().await.unwrap_or_default();
+        return Err(format!("TTS API error ({}): {}", status, error_text));
+    }
+    
+    // Parse response to get audio URL
+    let result: SubmitResponse = response.json().await.map_err(|e| e.to_string())?;
+    
+    // Construct audio URL from path or url
+    let audio_url = if let Some(output) = result.output {
+        if let Some(file_data) = output.output_1 {
+            if let Some(url) = file_data.url {
+                url
+            } else if let Some(path) = file_data.path {
+                format!("{}/file={}", tts_config.base_url.trim_end_matches('/'), path)
+            } else {
+                return Err("No audio URL or path in response".to_string());
+            }
+        } else {
+            return Err("No output_1 in response".to_string());
+        }
+    } else {
+        return Err("No output in response".to_string());
+    };
+    
+    // Download and save to archive
+    let audio_response = client.get(&audio_url).send().await.map_err(|e| e.to_string())?;
+    let audio_bytes = audio_response.bytes().await.map_err(|e| e.to_string())?;
+    
+    // Save to archive and return local path
+    let local_path = save_audio_to_archive(&audio_bytes, &msg_id, seq)?;
+    
+    // Also cache it for non-archived requests
+    let cache_dir = get_tts_cache_dir();
+    let cache_key = generate_cache_key(&text, &speaker, &emo, &emo_method, speed);
+    let cache_path = cache_dir.join(format!("{}.wav", cache_key));
+    let _ = fs::write(&cache_path, &audio_bytes);
+    
+    Ok(format!("file://{}", local_path))
 }
 
-/// Clear TTS cache
+/// Clear TTS cache (not archive)
 #[tauri::command]
 pub async fn clear_tts_cache() -> Result<u64, String> {
     let cache_dir = get_tts_cache_dir();
@@ -342,6 +463,61 @@ pub async fn get_tts_cache_info() -> Result<(u64, u64), String> {
     }
     
     Ok((file_count, total_size))
+}
+
+/// Save TTS meta for a message
+#[tauri::command]
+pub async fn save_tts_meta(
+    msg_id: String,
+    date: String,
+    audio_files: Vec<TTSAudioFile>,
+) -> Result<(), String> {
+    let archive_dir = get_archive_date_dir(&date);
+    let meta_path = archive_dir.join("meta.json");
+    
+    // Load existing meta or create new
+    let mut meta: HashMap<String, TTSMeta> = if meta_path.exists() {
+        let content = fs::read_to_string(&meta_path).map_err(|e| e.to_string())?;
+        serde_json::from_str(&content).unwrap_or_default()
+    } else {
+        HashMap::new()
+    };
+    
+    // Update meta for this message
+    meta.insert(msg_id.clone(), TTSMeta { audio_files: audio_files.clone() });
+    
+    // Write back
+    let content = serde_json::to_string_pretty(&meta).map_err(|e| e.to_string())?;
+    fs::write(&meta_path, content).map_err(|e| e.to_string())?;
+    
+    Ok(())
+}
+
+/// Get TTS meta for a message
+#[tauri::command]
+pub async fn get_tts_meta(msg_id: String, date: String) -> Result<Option<TTSMeta>, String> {
+    let archive_dir = get_archive_date_dir(&date);
+    let meta_path = archive_dir.join("meta.json");
+    
+    if !meta_path.exists() {
+        return Ok(None);
+    }
+    
+    let content = fs::read_to_string(&meta_path).map_err(|e| e.to_string())?;
+    let meta: HashMap<String, TTSMeta> = serde_json::from_str(&content).unwrap_or_default();
+    
+    Ok(meta.get(&msg_id).cloned())
+}
+
+/// Get TTS audio paths for replay
+#[tauri::command]
+pub async fn get_tts_replay_paths(msg_id: String, date: String) -> Result<Vec<String>, String> {
+    let meta = get_tts_meta(msg_id, date).await?;
+    
+    match meta {
+        Some(m) => Ok(m.audio_files.into_iter().map(|f| format!("file://{}", f.path)).collect()),
+        None => Err("No TTS meta found for this message".to_string()),
+    }
 }
 
 /// Internal helper to get current character's voice_id

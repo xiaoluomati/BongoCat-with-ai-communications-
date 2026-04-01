@@ -37,5 +37,6 @@ pub use character::{UserProfile, CharacterBrief, get_user_profile, save_user_pro
 pub use tts::{
     get_tts_config, save_tts_config, get_voice_config, save_voice, delete_voice,
     tts_speak, clear_tts_cache, get_tts_cache_info,
-    get_index_tts_voices, get_index_tts_emos
+    get_index_tts_voices, get_index_tts_emos,
+    save_tts_meta, get_tts_meta, get_tts_replay_paths
 };
