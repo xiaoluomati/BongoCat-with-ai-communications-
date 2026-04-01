@@ -136,6 +136,58 @@ pub async fn send_message(
     Ok(response.into())
 }
 
+/// Send a chat message with streaming TTS support
+/// This command emits chunks via events for frontend to handle TTS streaming
+#[tauri::command]
+pub async fn send_message_stream(
+    request: ChatRequestInput,
+    chat_state: State<'_, Arc<RwLock<ChatState>>>,
+    llm_manager: State<'_, Arc<LLMManager>>,
+    app_handle: tauri::AppHandle,
+) -> Result<ChatResponseOutput, String> {
+    // Add user message
+    let user_message = ChatMessage::user(&request.message);
+    
+    // Build complete context
+    let messages = build_full_context(
+        &request.message,
+        request.system_prompt.clone(),
+        chat_state.clone(),
+    ).await?;
+    
+    // Add user message to state
+    let mut state = chat_state.write().await;
+    state.messages.push(user_message);
+    
+    // Create chat_id for event routing
+    let chat_id = uuid::Uuid::new_v4().to_string();
+    drop(state);
+    
+    // Emit start event
+    let _ = app_handle.emit("chat_stream_start", (&chat_id,));
+    
+    // Stream mode - emit chunks via events
+    let app_handle_clone = app_handle.clone();
+    let chat_id_clone = chat_id.clone();
+    
+    let response = llm_manager
+        .chat_stream(messages, move |chunk| {
+            let _ = app_handle_clone.emit("chat_stream_chunk", (&chat_id_clone, &chunk));
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+    
+    // Emit end event
+    let _ = app_handle.emit("chat_stream_end", (&chat_id,));
+    
+    // Save assistant message to state
+    let assistant_message = ChatMessage::assistant(&response.content);
+    let mut state = chat_state.write().await;
+    state.messages.push(assistant_message);
+    
+    Ok(response.into())
+}
+
 /// Build full context: system_prompt + preset_prompt + user_profile + long_term_memory + short_term_memory + current dialog
 async fn build_full_context(
     user_message: &str,

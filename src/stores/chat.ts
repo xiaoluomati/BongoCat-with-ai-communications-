@@ -3,6 +3,8 @@ import { ref } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 
+import { useTTSStore } from './tts'
+
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant'
@@ -15,6 +17,9 @@ export const useChatStore = defineStore('chat', () => {
   const isLoading = ref(false)
   const enabled = ref(false)
   const maxMessages = ref(100)
+
+  // TTS store instance for streaming
+  const ttsStore = useTTSStore()
 
   // Load config
   async function loadConfig() {
@@ -87,7 +92,7 @@ export const useChatStore = defineStore('chat', () => {
         }
         messages.value.push(assistantMessage)
 
-        // Listen for chunks
+        // Listen for chunks and trigger TTS streaming
         await listen<[string, string]>('chat_stream_chunk', (event) => {
           const [, chunk] = event.payload
           streamingContent += chunk
@@ -96,11 +101,13 @@ export const useChatStore = defineStore('chat', () => {
           if (msgIndex !== -1) {
             messages.value[msgIndex].content = streamingContent
           }
+          // Trigger TTS streaming
+          ttsStore.speakStream(chunk)
         })
 
-        // Send message (non-blocking for streaming)
+        // Send message using stream command (doesn't trigger TTS internally)
         try {
-          const response = await invoke<any>('send_message', {
+          const response = await invoke<any>('send_message_stream', {
             request: {
               message: content,
               system_prompt: null,
