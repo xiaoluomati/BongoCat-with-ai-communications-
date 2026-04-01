@@ -102,6 +102,23 @@ pub async fn send_message(
     
     // Auto-update user profile
     let msg_count = state.messages.len() / 2; // user + assistant = 1 pair
+    
+    // Trigger TTS for AI response (async, non-blocking)
+    let tts_text = response.content.clone();
+    let app_handle_clone = app_handle.clone();
+    tokio::spawn(async move {
+        let app_handle_inner = app_handle_clone.clone();
+        match crate::commands::tts::tts_speak(tts_text, crate::commands::tts::get_current_character_voice_id_internal(), app_handle_clone).await {
+            Ok(audio_url) => {
+                // Emit TTS ready event with audio URL for frontend to play
+                let _ = app_handle_inner.emit("tts_ready", audio_url);
+            }
+            Err(e) => {
+                println!("[TTS] Error: {}", e);
+            }
+        }
+    });
+    
     drop(state);
     
     // Check if we should update profile (every 50 messages)

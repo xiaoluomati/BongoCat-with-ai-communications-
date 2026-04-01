@@ -200,6 +200,8 @@ pub struct Character {
     pub preferred_address: String,
     pub system_prompt: String,
     pub preset_prompt: String,
+    #[serde(default)]
+    pub voice_id: Option<String>,  // 关联的 TTS 音色 ID
 }
 
 fn get_characters_dir() -> PathBuf {

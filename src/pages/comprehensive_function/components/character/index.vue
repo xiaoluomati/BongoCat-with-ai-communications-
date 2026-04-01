@@ -16,6 +16,7 @@ interface Character {
   system_prompt: string
   avatar: string
   preferred_address: string
+  voice_id?: string
 }
 
 interface CharacterBrief {
@@ -33,6 +34,9 @@ const currentCharacterId = ref('')
 const editingCharacter = ref<Character | null>(null)
 const isModalVisible = ref(false)
 const isEditing = ref(false)
+const ttsVoices = ref<Record<string, { speaker: string; emo: string }>>({})
+const ttsDefaultVoiceId = ref('')
+const loadingVoices = ref(false)
 
 // Default character template
 const defaultCharacter: Character = {
@@ -59,8 +63,24 @@ async function loadCharacters() {
   }
 }
 
+// Load TTS voices
+async function loadTTSVoices() {
+  loadingVoices.value = true
+  try {
+    const config = await invoke<any>('get_tts_config')
+    ttsVoices.value = config.voices || {}
+    ttsDefaultVoiceId.value = config.default_voice_id || ''
+  } catch (err) {
+    console.error('Failed to load TTS voices:', err)
+    ttsVoices.value = {}
+  } finally {
+    loadingVoices.value = false
+  }
+}
+
 // Open create modal
 function openCreateModal() {
+  loadTTSVoices()
   editingCharacter.value = { ...defaultCharacter }
   isEditing.value = false
   isModalVisible.value = true
@@ -69,6 +89,7 @@ function openCreateModal() {
 // Open edit modal
 async function openEditModal(char: CharacterBrief) {
   console.warn('Opening edit modal for:', char)
+  await loadTTSVoices()
   try {
     const charData = await invoke<Character>('load_character', { id: char.id })
     console.warn('Loaded character data:', charData)
@@ -268,6 +289,25 @@ onMounted(() => {
           v-model:value="editingCharacter.preferred_address" 
           placeholder="亲爱的"
         />
+      </div>
+
+      <!-- Voice Selection -->
+      <div v-if="Object.keys(ttsVoices).length > 0">
+        <label class="block text-sm font-medium mb-1">
+          TTS 音色
+          <span class="text-gray-400 font-normal">(关联语音合成音色)</span>
+        </label>
+        <Select
+          v-model:value="editingCharacter.voice_id"
+          class="w-full"
+          placeholder="选择音色（可选）"
+          allowClear
+        >
+          <Select.Option :value="''">使用默认音色</Select.Option>
+          <Select.Option v-for="(voice, id) in ttsVoices" :key="id" :value="id">
+            {{ id === ttsDefaultVoiceId ? `${id} (默认)` : id }} - {{ voice.speaker }}
+          </Select.Option>
+        </Select>
       </div>
 
       <!-- Preset Prompt -->

@@ -31,7 +31,7 @@ pub use window::{
 };
 
 // Character - explicit export to avoid conflict with config
-pub use character::{UserProfile, CharacterBrief, get_user_profile, save_user_profile, check_and_update_profile, trigger_profile_update, get_current_character, switch_character, list_character_briefs};
+pub use character::{UserProfile, CharacterBrief, get_user_profile, save_user_profile, check_and_update_profile, trigger_profile_update, get_current_character, switch_character, list_character_briefs, get_current_character_voice_id};
 
 // TTS commands
 pub use tts::{

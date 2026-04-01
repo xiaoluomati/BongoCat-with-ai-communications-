@@ -6,8 +6,10 @@ import { invoke } from '@tauri-apps/api/core'
 import { onMounted, ref, nextTick, watch } from 'vue'
 
 import { useChatStore } from '@/stores/chat'
+import { useTTSStore } from '@/stores/tts'
 
 const chatStore = useChatStore()
+const ttsStore = useTTSStore()
 const inputText = ref('')
 const messagesContainer = ref<HTMLElement | null>(null)
 const chatWindow = getCurrentWebviewWindow()
@@ -22,6 +24,7 @@ const hasMoreHistory = ref(true)
 // Load config and history on mount
 onMounted(async () => {
   await chatStore.loadConfig()
+  await ttsStore.init()
   // 先加载今天的消息
   await chatStore.loadHistory()
   loadedDates.value = [getTodayString()]

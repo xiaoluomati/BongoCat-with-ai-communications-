@@ -245,3 +245,12 @@ pub fn list_character_briefs() -> Result<Vec<CharacterBrief>, String> {
         preferred_address: c.preferred_address,
     }).collect())
 }
+
+/// 获取当前角色的音色 ID
+#[tauri::command]
+pub fn get_current_character_voice_id() -> Result<Option<String>, String> {
+    let config = crate::commands::config::load_config()?;
+    let current_char_id = config.characters.current;
+    let char_config = crate::commands::config::load_character(current_char_id)?;
+    Ok(char_config.voice_id)
+}

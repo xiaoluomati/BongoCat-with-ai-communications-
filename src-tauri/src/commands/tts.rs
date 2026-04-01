@@ -15,8 +15,6 @@ struct SubmitResponse {
 
 #[derive(Debug, Deserialize)]
 struct SubmitOutput {
-    // The response contains file data in a complex format
-    // We need to parse it to get the audio file path
     #[serde(rename = "output_1")]
     output_1: Option<FileData>,
 }
@@ -137,7 +135,6 @@ pub async fn get_index_tts_emos(base_url: String) -> Result<Vec<String>, String>
     
     let result: EmotionListResponse = response.json().await.map_err(|e| e.to_string())?;
     
-    // Filter out "请选择情绪" which is just a placeholder
     Ok(result.output.into_iter().filter(|s| s != "请选择情绪").collect())
 }
 
@@ -164,25 +161,26 @@ fn generate_cache_key(text: &str, speaker: &str, emo: &str, emo_method: &str, sp
     let input = format!("{}|{}|{}|{}|{}", text, speaker, emo, emo_method, speed);
     let mut hasher = DefaultHasher::new();
     input.hash(&mut hasher);
-    format!("{:x}.wav", hasher.finish())
+    format!("{:x}", hasher.finish())
 }
 
 /// Speak text using TTS
+/// Returns the audio URL for frontend to play
 #[tauri::command]
 pub async fn tts_speak(
     text: String,
     voice_id: Option<String>,
     _app_handle: tauri::AppHandle,
-) -> Result<(), String> {
+) -> Result<String, String> {
     let config = load_config()?;
     let tts_config = &config.tts;
     
     if !tts_config.enabled {
-        return Ok(());
+        return Err("TTS is disabled".to_string());
     }
     
     if text.is_empty() {
-        return Ok(());
+        return Err("Text is empty".to_string());
     }
     
     // Get voice configuration
@@ -219,74 +217,83 @@ pub async fn tts_speak(
     // Check cache first
     let cache_dir = get_tts_cache_dir();
     let cache_key = generate_cache_key(&text, &speaker, &emo, &emo_method, speed);
-    let cache_path = cache_dir.join(&cache_key);
+    let cache_path = cache_dir.join(format!("{}.wav", cache_key));
+    
+    let audio_url: String;
     
     if cache_path.exists() {
-        // TODO: Play from cache
-        println!("[TTS] Playing from cache: {:?}", cache_path);
-        return Ok(());
-    }
-    
-    // Call IndexTTS API
-    let client = Client::builder()
-        .timeout(std::time::Duration::from_secs(60))
-        .build()
-        .map_err(|e| e.to_string())?;
-    
-    let url = format!("{}/run/submit_and_refresh", tts_config.base_url);
-    
-    // Parse emo text (remove .wav extension if present)
-    let emo_text = emo.replace(".wav", "");
-    
-    let request_body = json!({
-        "voices_dropdown": speaker,
-        "speed": speed,
-        "text": text,
-        "emo_control_method": emo_method,
-        "emo_weight": 0.8,
-        "emo_text": emo_text,
-        "emo_random": false,
-        "max_tokens": 100,
-        "do_sample": true,
-        "temperature": 0.7,
-        "top_p": 0.9,
-        "top_k": 50
-    });
-    
-    let response = client
-        .post(&url)
-        .json(&request_body)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
-    
-    if !response.status().is_success() {
-        let status = response.status();
-        let error_text = response.text().await.unwrap_or_default();
-        return Err(format!("TTS API error ({}): {}", status, error_text));
-    }
-    
-    // Parse response to get audio file path
-    let result: SubmitResponse = response.json().await.map_err(|e| e.to_string())?;
-    
-    // Extract audio URL from response
-    let audio_url = if let Some(output) = result.output {
-        if let Some(file_data) = output.output_1 {
-            file_data.url.or(file_data.path)
-        } else {
-            None
-        }
+        // Use cached file
+        audio_url = format!("file://{}", cache_path.to_string_lossy());
     } else {
-        None
-    };
-    
-    if let Some(url) = audio_url {
-        println!("[TTS] Generated audio URL: {}", url);
-        // TODO: Download audio from URL and save to cache
+        // Call IndexTTS API
+        let client = Client::builder()
+            .timeout(std::time::Duration::from_secs(60))
+            .build()
+            .map_err(|e| e.to_string())?;
+        
+        let url = format!("{}/run/submit_and_refresh", tts_config.base_url);
+        
+        // Parse emo text (remove .wav extension if present)
+        let emo_text = emo.replace(".wav", "");
+        
+        let request_body = json!({
+            "voices_dropdown": speaker,
+            "speed": speed,
+            "text": text,
+            "emo_control_method": emo_method,
+            "emo_weight": 0.8,
+            "emo_text": emo_text,
+            "emo_random": false,
+            "max_tokens": 100,
+            "do_sample": true,
+            "temperature": 0.7,
+            "top_p": 0.9,
+            "top_k": 50
+        });
+        
+        let response = client
+            .post(&url)
+            .json(&request_body)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+        
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(format!("TTS API error ({}): {}", status, error_text));
+        }
+        
+        // Parse response to get audio URL
+        let result: SubmitResponse = response.json().await.map_err(|e| e.to_string())?;
+        
+        // Construct audio URL from path or url
+        audio_url = if let Some(output) = result.output {
+            if let Some(file_data) = output.output_1 {
+                if let Some(url) = file_data.url {
+                    url
+                } else if let Some(path) = file_data.path {
+                    // Construct URL from path
+                    format!("{}/file={}", tts_config.base_url.trim_end_matches('/'), path)
+                } else {
+                    return Err("No audio URL or path in response".to_string());
+                }
+            } else {
+                return Err("No output_1 in response".to_string());
+            }
+        } else {
+            return Err("No output in response".to_string());
+        };
+        
+        // Try to download and cache the audio
+        if let Ok(audio_response) = client.get(&audio_url).send().await {
+            if let Ok(bytes) = audio_response.bytes().await {
+                let _ = fs::write(&cache_path, &bytes);
+            }
+        }
     }
     
-    println!("[TTS] Audio generated (cache not implemented yet)");
-    Ok(())
+    Ok(audio_url)
 }
 
 /// Clear TTS cache
@@ -335,4 +342,12 @@ pub async fn get_tts_cache_info() -> Result<(u64, u64), String> {
     }
     
     Ok((file_count, total_size))
+}
+
+/// Internal helper to get current character's voice_id
+pub fn get_current_character_voice_id_internal() -> Option<String> {
+    let config = load_config().ok()?;
+    let current_char_id = config.characters.current;
+    let char_config = crate::commands::config::load_character(current_char_id).ok()?;
+    char_config.voice_id
 }
