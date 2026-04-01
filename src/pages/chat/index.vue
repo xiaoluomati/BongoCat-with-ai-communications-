@@ -7,9 +7,18 @@ import { onMounted, ref, nextTick, watch } from 'vue'
 
 import { useChatStore } from '@/stores/chat'
 import { useTTSStore } from '@/stores/tts'
+import type { ChatMessage } from '@/stores/chat'
 
 const chatStore = useChatStore()
 const ttsStore = useTTSStore()
+
+// Replay TTS for a message
+async function replayTTS(msg: ChatMessage) {
+  if (!msg.tts_meta?.audio_files?.length) return
+  for (const audio of msg.tts_meta.audio_files) {
+    ttsStore.enqueue('file://' + audio.path)
+  }
+}
 const inputText = ref('')
 const messagesContainer = ref<HTMLElement | null>(null)
 const chatWindow = getCurrentWebviewWindow()
@@ -239,7 +248,17 @@ function formatTime(timestamp: number): string {
           
           <div class="message-bubble">
             <div class="message-content">{{ msg.content }}</div>
-            <div class="message-time">{{ formatTime(msg.timestamp) }}</div>
+            <div class="message-time">
+              {{ formatTime(msg.timestamp) }}
+              <span
+                v-if="msg.tts_meta?.audio_files?.length"
+                class="tts-replay-icon"
+                @click="replayTTS(msg)"
+                title="重放TTS"
+              >
+                🔊
+              </span>
+            </div>
           </div>
         </div>
       </template>

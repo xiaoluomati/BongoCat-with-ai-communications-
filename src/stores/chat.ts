@@ -5,11 +5,21 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 
 import { useTTSStore } from './tts'
 
+export interface TTSAudioFile {
+  seq: number
+  path: string
+  text: string
+}
+
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant'
   content: string
   timestamp: number
+  tts_meta?: {
+    date: string
+    audio_files: TTSAudioFile[]
+  }
 }
 
 export const useChatStore = defineStore('chat', () => {
@@ -118,6 +128,23 @@ export const useChatStore = defineStore('chat', () => {
           const msgIndex = messages.value.findIndex(m => m.id === streamingMessageId)
           if (msgIndex !== -1) {
             messages.value[msgIndex].content = response.content
+            // Save TTS meta if we have audio files
+            if (streamingAudioFiles.length > 0) {
+              messages.value[msgIndex].tts_meta = {
+                date: today,
+                audio_files: streamingAudioFiles
+              }
+              // Save meta to backend
+              try {
+                await invoke('save_tts_meta', {
+                  msgId: streamingMessageId,
+                  date: today,
+                  audioFiles: streamingAudioFiles
+                })
+              } catch (err) {
+                console.error('[TTS] save meta error:', err)
+              }
+            }
           }
 
           // Save to memory
