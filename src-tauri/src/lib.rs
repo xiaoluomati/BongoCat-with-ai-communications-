@@ -19,7 +19,7 @@ use commands::{
     get_user_profile, save_user_profile, check_and_update_profile,
     save_quarterly_summary, get_quarterly_summaries, save_yearly_summary, get_yearly_summaries,
     get_tts_config, save_tts_config, get_voice_config, save_voice, delete_voice,
-    tts_speak, clear_tts_cache, get_tts_cache_info,
+    tts_speak, clear_tts_cache, get_tts_cache_info, get_index_tts_voices, get_index_tts_emos,
 };
 use core::{
     device::start_device_listening,
@@ -147,7 +147,9 @@ pub fn run() {
             delete_voice,
             tts_speak,
             clear_tts_cache,
-            get_tts_cache_info
+            get_tts_cache_info,
+            get_index_tts_voices,
+            get_index_tts_emos
         ])
         .manage(Arc::new(RwLock::new(ChatState::default())))
         .plugin(tauri_plugin_custom_window::init())

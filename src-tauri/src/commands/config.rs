@@ -49,17 +49,21 @@ pub struct MinimaxConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VoiceConfig {
-    pub speaker: String,
-    pub emo: String,
-    pub weight: f32,
+    pub speaker: String,           // 音色名称
+    pub emo: String,               // 情感标签
+    pub weight: f32,               // 情感强度 (0.0-1.6)
+    pub emo_method: Option<String>, // 情感控制方式
+    pub speed: Option<f32>,        // 语速 (0.1-2.5)
 }
 
 impl Default for VoiceConfig {
     fn default() -> Self {
         Self {
             speaker: "苏瑶".to_string(),
-            emo: "neutral".to_string(),
-            weight: 1.0,
+            emo: "高兴.wav".to_string(),
+            weight: 0.8,
+            emo_method: Some("使用情感描述文本控制".to_string()),
+            speed: Some(1.0),
         }
     }
 }
