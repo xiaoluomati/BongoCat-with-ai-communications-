@@ -5,6 +5,7 @@ import { ref, onMounted, computed } from 'vue'
 
 import ProList from '@/components/pro-list/index.vue'
 import ProListItem from '@/components/pro-list-item/index.vue'
+import { useTTSStore } from '@/stores/tts'
 
 // TTS Configuration
 interface VoiceConfig {
@@ -22,11 +23,21 @@ interface TTSConfig {
   volume: number
   speed: number
   voices: Record<string, VoiceConfig>
+  stream_enabled: boolean
+  stream_trigger_threshold: number
+  stream_max_buffer: number
+  stream_min_chunk: number
+  fade_duration: number
 }
 
 const enabled = ref(false)
 const baseUrl = ref('http://localhost:9880')
 const volume = ref(80)
+const streamEnabled = ref(false)
+const streamTriggerThreshold = ref(20)
+const streamMaxBuffer = ref(50)
+const streamMinChunk = ref(5)
+const fadeDuration = ref(200)
 const voices = ref<Record<string, VoiceConfig>>({})
 const defaultVoiceId = ref('suyao')
 const testingConnection = ref(false)
@@ -63,6 +74,9 @@ const voiceList = computed(() => {
   }))
 })
 
+// TTS Store for playback controls
+const ttsStore = useTTSStore()
+
 // Load config on mount
 onMounted(async () => {
   try {
@@ -72,6 +86,11 @@ onMounted(async () => {
     volume.value = config.volume
     voices.value = config.voices || {}
     defaultVoiceId.value = config.default_voice_id
+    streamEnabled.value = config.stream_enabled ?? false
+    streamTriggerThreshold.value = config.stream_trigger_threshold ?? 20
+    streamMaxBuffer.value = config.stream_max_buffer ?? 50
+    streamMinChunk.value = config.stream_min_chunk ?? 5
+    fadeDuration.value = config.fade_duration ?? 200
   } catch (err) {
     console.error('Failed to load TTS config:', err)
   }
@@ -101,8 +120,13 @@ async function saveConfig() {
       base_url: baseUrl.value,
       default_voice_id: defaultVoiceId.value,
       volume: volume.value,
-      speed: volume.value, // Use volume as speed for now
-      voices: voices.value
+      speed: volume.value,
+      voices: voices.value,
+      stream_enabled: streamEnabled.value,
+      stream_trigger_threshold: streamTriggerThreshold.value,
+      stream_max_buffer: streamMaxBuffer.value,
+      stream_min_chunk: streamMinChunk.value,
+      fade_duration: fadeDuration.value
     }
     await invoke('save_tts_config', { ttsConfig: config })
     // Don't show message here to avoid spam
@@ -226,6 +250,83 @@ async function clearCache() {
           <Switch v-model:checked="enabled" @change="saveConfig" />
         </ProListItem>
 
+        <!-- Stream Mode -->
+        <ProListItem
+          v-if="enabled"
+          description="边生成边播放，降低首句延迟"
+          title="流式模式"
+        >
+          <Switch v-model:checked="streamEnabled" @change="saveConfig" />
+        </ProListItem>
+
+        <!-- Stream Parameters -->
+        <template v-if="enabled && streamEnabled">
+          <!-- Trigger Threshold -->
+          <ProListItem
+            description="累积超过此值时触发 TTS（句子较短时可设低）"
+            title="触发阈值"
+          >
+            <div class="w-48">
+              <Slider
+                v-model:value="streamTriggerThreshold"
+                :min="10"
+                :max="50"
+                :marks="{ 10: '10', 20: '20', 30: '30', 40: '40', 50: '50' }"
+                @afterChange="saveConfig"
+              />
+            </div>
+          </ProListItem>
+
+          <!-- Max Buffer -->
+          <ProListItem
+            description="超过此值强制触发 TTS（防止单次过长）"
+            title="最大缓冲"
+          >
+            <div class="w-48">
+              <Slider
+                v-model:value="streamMaxBuffer"
+                :min="30"
+                :max="100"
+                :marks="{ 30: '30', 50: '50', 70: '70', 100: '100' }"
+                @afterChange="saveConfig"
+              />
+            </div>
+          </ProListItem>
+
+          <!-- Min Chunk -->
+          <ProListItem
+            description="必须达到此长度才触发（避免太短的碎片）"
+            title="最小触发"
+          >
+            <div class="w-48">
+              <Slider
+                v-model:value="streamMinChunk"
+                :min="3"
+                :max="10"
+                :marks="{ 3: '3', 5: '5', 7: '7', 10: '10' }"
+                @afterChange="saveConfig"
+              />
+            </div>
+          </ProListItem>
+
+          <!-- Fade Duration -->
+          <ProListItem
+            description="音频渐变时长（毫秒）"
+            title="渐变时长"
+          >
+            <div class="w-48">
+              <Slider
+                v-model:value="fadeDuration"
+                :min="0"
+                :max="500"
+                :step="50"
+                :marks="{ 0: '0', 200: '200', 400: '400', 500: '500' }"
+                @afterChange="saveConfig"
+              />
+            </div>
+          </ProListItem>
+        </template>
+
         <!-- Base URL -->
         <ProListItem
           v-if="enabled"
@@ -344,6 +445,22 @@ async function clearCache() {
         </ProListItem>
       </ProList>
     </Spin>
+
+    <!-- Playback Controls -->
+    <div v-if="enabled && ttsStore.isPlaying.value" class="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-white shadow-lg rounded-lg px-4 py-3 flex items-center gap-3 z-50">
+      <span class="text-sm text-gray-600">
+        {{ ttsStore.currentText.value?.slice(0, 20) || '播放中...' }}{{ (ttsStore.currentText.value?.length || 0) > 20 ? '...' : '' }}
+      </span>
+      <Button size="small" @click="ttsStore.isPaused.value ? ttsStore.resume() : ttsStore.pause()">
+        {{ ttsStore.isPaused.value ? '继续' : '暂停' }}
+      </Button>
+      <Button size="small" @click="ttsStore.skip()">
+        跳过
+      </Button>
+      <Button size="small" danger @click="ttsStore.stop()">
+        停止
+      </Button>
+    </div>
 
     <!-- Voice Modal -->
     <Modal

@@ -9,6 +9,11 @@ interface TTSConfig {
   volume: number
   speed: number
   voices: Record<string, VoiceConfig>
+  stream_enabled: boolean
+  stream_trigger_threshold: number
+  stream_max_buffer: number
+  stream_min_chunk: number
+  fade_duration: number
 }
 
 interface VoiceConfig {
@@ -19,20 +24,28 @@ interface VoiceConfig {
   speed?: number
 }
 
+interface TTSHistoryItem {
+  id: string
+  text: string
+  voice_id: string
+  timestamp: number
+}
+
 export const useTTSStore = defineStore('tts', () => {
   // State
   const currentAudio = ref<HTMLAudioElement | null>(null)
-  const audioQueue = ref<string[]>([])  // 播放队列
+  const audioQueue = ref<string[]>([])
   const isPlaying = ref(false)
+  const isPaused = ref(false)
   const isEnabled = ref(false)
-  const isStreamMode = ref(false)  // 流式 TTS 开关
+  const isStreamMode = ref(false)
   const config = ref<TTSConfig | null>(null)
   const currentVoiceId = ref<string | null>(null)
+  const currentText = ref('')  // 当前播放的文本
+  const isFading = ref(false)
 
   // TTS buffer for streaming
   const ttsBuffer = ref('')
-  const TTS_THRESHOLD = 20  // 触发阈值（字符数）
-  const MAX_BUFFER_LENGTH = 50  // 最大 buffer 长度
 
   // Initialize
   async function init() {
@@ -40,6 +53,7 @@ export const useTTSStore = defineStore('tts', () => {
     try {
       config.value = await invoke<TTSConfig>('get_tts_config')
       isEnabled.value = config.value.enabled
+      isStreamMode.value = config.value.stream_enabled
       currentVoiceId.value = config.value.default_voice_id
     } catch (err) {
       console.error('[TTS] Failed to load config:', err)
@@ -53,57 +67,137 @@ export const useTTSStore = defineStore('tts', () => {
     })
   }
 
-  // Play next audio in queue
-  async function playNext(audioUrl: string): Promise<void> {
+  // Get config value with defaults
+  function getThreshold(): number {
+    return config.value?.stream_trigger_threshold ?? 20
+  }
+
+  function getMaxBuffer(): number {
+    return config.value?.stream_max_buffer ?? 50
+  }
+
+  function getMinChunk(): number {
+    return config.value?.stream_min_chunk ?? 5
+  }
+
+  function getFadeDuration(): number {
+    return config.value?.fade_duration ?? 200
+  }
+
+  // Play next audio in queue with fade
+  async function playNext(audioUrl: string, text: string = ''): Promise<void> {
+    // Fade out previous
+    if (currentAudio.value) {
+      await fadeOut(currentAudio.value, getFadeDuration())
+      currentAudio.value.pause()
+    }
+
     isPlaying.value = true
+    isPaused.value = false
+    currentText.value = text
+
     const audio = new Audio(audioUrl)
     currentAudio.value = audio
 
     audio.onended = () => {
       currentAudio.value = null
       isPlaying.value = false
+      currentText.value = ''
+      isFading.value = false
 
       // Auto play next
       if (audioQueue.value.length > 0) {
-        const nextUrl = audioQueue.value.shift()
-        playNext(nextUrl!)
+        const next = audioQueue.value.shift()
+        const nextText = audioQueue.value.length > 0 ? '' : ''
+        playNext(next!, nextText)
       }
     }
 
     audio.onerror = () => {
       console.error('[TTS] Audio play error')
-      isPlaying.value = false
       currentAudio.value = null
+      isPlaying.value = false
+      currentText.value = ''
+      isFading.value = false
 
       // Continue to next even on error
       if (audioQueue.value.length > 0) {
-        const nextUrl = audioQueue.value.shift()
-        playNext(nextUrl!)
+        const next = audioQueue.value.shift()
+        playNext(next!)
       }
     }
 
+    // Set volume
+    const targetVolume = (config.value?.volume ?? 80) / 100
+    audio.volume = 0
+
     try {
       await audio.play()
+      // Fade in
+      await fadeIn(audio, targetVolume, getFadeDuration())
     } catch (err) {
       console.error('[TTS] Play error:', err)
       isPlaying.value = false
       currentAudio.value = null
-
-      // Continue to next even on error
-      if (audioQueue.value.length > 0) {
-        const nextUrl = audioQueue.value.shift()
-        playNext(nextUrl!)
-      }
+      isFading.value = false
     }
   }
 
+  // Fade in volume
+  async function fadeIn(audio: HTMLAudioElement, targetVolume: number, duration: number): Promise<void> {
+    if (duration <= 0) {
+      audio.volume = targetVolume
+      return
+    }
+
+    isFading.value = true
+    const steps = 10
+    const stepDuration = duration / steps
+    const volumeStep = targetVolume / steps
+
+    for (let i = 1; i <= steps; i++) {
+      if (!audio) break
+      audio.volume = Math.min(volumeStep * i, targetVolume)
+      await sleep(stepDuration)
+    }
+
+    audio.volume = targetVolume
+    isFading.value = false
+  }
+
+  // Fade out volume
+  async function fadeOut(audio: HTMLAudioElement, duration: number): Promise<void> {
+    if (duration <= 0) {
+      audio.volume = 0
+      return
+    }
+
+    isFading.value = true
+    const startVolume = audio.volume
+    const steps = 10
+    const stepDuration = duration / steps
+    const volumeStep = startVolume / steps
+
+    for (let i = steps - 1; i >= 0; i--) {
+      if (!audio) break
+      audio.volume = Math.max(volumeStep * i, 0)
+      await sleep(stepDuration)
+    }
+
+    audio.volume = 0
+    isFading.value = false
+  }
+
+  // Utility sleep
+  function sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms))
+  }
+
   // Add to queue
-  function enqueue(audioUrl: string): void {
+  function enqueue(audioUrl: string, text: string = ''): void {
     if (!isPlaying.value && !currentAudio.value) {
-      // No audio playing, play immediately
-      playNext(audioUrl)
+      playNext(audioUrl, text)
     } else {
-      // Add to queue
       audioQueue.value.push(audioUrl)
     }
   }
@@ -116,6 +210,36 @@ export const useTTSStore = defineStore('tts', () => {
     }
     audioQueue.value = []
     isPlaying.value = false
+    isPaused.value = false
+    currentText.value = ''
+    isFading.value = false
+  }
+
+  // Pause
+  function pause(): void {
+    if (currentAudio.value && isPlaying.value && !isPaused.value) {
+      currentAudio.value.pause()
+      isPaused.value = true
+    }
+  }
+
+  // Resume
+  function resume(): void {
+    if (currentAudio.value && isPaused.value) {
+      currentAudio.value.play()
+      isPaused.value = false
+    }
+  }
+
+  // Skip to next
+  function skip(): void {
+    if (currentAudio.value) {
+      // Trigger onended to play next
+      const audio = currentAudio.value
+      currentAudio.value = null
+      isPlaying.value = false
+      audio.dispatchEvent(new Event('ended'))
+    }
   }
 
   // Manual speak (for testing, non-streaming mode)
@@ -130,7 +254,7 @@ export const useTTSStore = defineStore('tts', () => {
         text,
         voiceId: voiceId || null
       })
-      enqueue(audioUrl)
+      enqueue(audioUrl, text)
     } catch (err) {
       console.error('[TTS] speak error:', err)
     }
@@ -138,7 +262,7 @@ export const useTTSStore = defineStore('tts', () => {
 
   // Stream speak - receives chunk, accumulates, triggers TTS when threshold met
   async function speakStream(chunk: string): Promise<void> {
-    if (!isEnabled.value) return
+    if (!isEnabled.value || !isStreamMode.value) return
 
     // Accumulate chunk to buffer
     ttsBuffer.value += chunk
@@ -146,11 +270,15 @@ export const useTTSStore = defineStore('tts', () => {
     // Check if should flush
     const len = ttsBuffer.value.length
     const lastChar = chunk.slice(-1)
-    const isEndMark = ['。', '！', '？'].includes(lastChar)
-    const isLongComma = lastChar === '，' && len >= 10
-    const isTooLong = len >= MAX_BUFFER_LENGTH
+    const threshold = getThreshold()
+    const maxBuffer = getMaxBuffer()
+    const minChunk = getMinChunk()
 
-    if (isEndMark || isTooLong || (isLongComma && len >= TTS_THRESHOLD)) {
+    const isEndMark = ['。', '！', '？'].includes(lastChar)
+    const isLongComma = lastChar === '，' && len >= minChunk
+    const isTooLong = len >= maxBuffer
+
+    if (isEndMark || isTooLong || (isLongComma && len >= threshold)) {
       const text = flushBuffer()
       if (text) {
         // Async TTS, don't wait
@@ -189,9 +317,15 @@ export const useTTSStore = defineStore('tts', () => {
     }
   }
 
-  // Set current voice
-  function setCurrentVoice(voiceId: string): void {
-    currentVoiceId.value = voiceId
+  // Reload config
+  async function reloadConfig(): Promise<void> {
+    try {
+      config.value = await invoke<TTSConfig>('get_tts_config')
+      isEnabled.value = config.value.enabled
+      isStreamMode.value = config.value.stream_enabled
+    } catch (err) {
+      console.error('[TTS] Failed to reload config:', err)
+    }
   }
 
   return {
@@ -199,10 +333,13 @@ export const useTTSStore = defineStore('tts', () => {
     currentAudio,
     audioQueue,
     isPlaying,
+    isPaused,
     isEnabled,
     isStreamMode,
     config,
     currentVoiceId,
+    currentText,
+    isFading,
     ttsBuffer,
 
     // Methods
@@ -210,12 +347,19 @@ export const useTTSStore = defineStore('tts', () => {
     speak,
     speakStream,
     stop,
+    pause,
+    resume,
+    skip,
     enqueue,
     playNext,
     flushBuffer,
     clearBuffer,
     setEnabled,
     setStreamMode,
-    setCurrentVoice
+    reloadConfig,
+    getThreshold,
+    getMaxBuffer,
+    getMinChunk,
+    getFadeDuration
   }
 })

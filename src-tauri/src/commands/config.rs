@@ -77,7 +77,23 @@ pub struct TTSConfig {
     pub speed: f32,
     #[serde(default)]
     pub voices: HashMap<String, VoiceConfig>,
+    // 流式 TTS 配置
+    #[serde(default)]
+    pub stream_enabled: bool,
+    #[serde(default = "default_trigger_threshold")]
+    pub stream_trigger_threshold: u32,
+    #[serde(default = "default_max_buffer")]
+    pub stream_max_buffer: u32,
+    #[serde(default = "default_min_chunk")]
+    pub stream_min_chunk: u32,
+    #[serde(default = "default_fade_duration")]
+    pub fade_duration: u32,
 }
+
+fn default_trigger_threshold() -> u32 { 20 }
+fn default_max_buffer() -> u32 { 50 }
+fn default_min_chunk() -> u32 { 5 }
+fn default_fade_duration() -> u32 { 200 }
 
 impl Default for TTSConfig {
     fn default() -> Self {
@@ -88,6 +104,11 @@ impl Default for TTSConfig {
             volume: 80,
             speed: 1.0,
             voices: HashMap::new(),
+            stream_enabled: false,
+            stream_trigger_threshold: 20,
+            stream_max_buffer: 50,
+            stream_min_chunk: 5,
+            fade_duration: 200,
         }
     }
 }
