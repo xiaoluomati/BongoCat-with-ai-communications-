@@ -288,3 +288,106 @@ const DEFAULT_EMOTION_PROMPT = `你的所有回复需要在开头包含情感标
 | 版本 | 日期 | 说明 |
 |------|------|------|
 | 1.0 | 2026-04-02 | 初始设计 |
+
+---
+
+## 十、聊天记录不记录情感标签
+
+### 10.1 设计原则
+
+```
+LLM 输出：<emo>高兴</emo>今天天气真不错！
+
+存储/显示：今天天气真不错！✅
+TTS：高兴.wav ✅
+```
+
+**情感标签只用于 TTS，不存储、不显示、不进入记忆系统。**
+
+### 10.2 状态机返回值
+
+```typescript
+interface ParseResult {
+  emotion: string   // 解析出的情感（用于 TTS）
+  text: string     // 纯净的正文（无标签，用于显示/存储）
+  ready: boolean   // 情感是否解析完成
+}
+```
+
+### 10.3 处理位置
+
+| 模块 | 处理 |
+|------|------|
+| 流式前端 | 解析标签后，消息 content 只追加 text（无标签） |
+| 聊天记录 | 只保存 ParseResult.text |
+| 记忆系统 | 只保存 ParseResult.text |
+| TTS | 使用 ParseResult.emotion |
+
+### 10.4 示例
+
+**流式处理：**
+```
+输入: "<emo>高兴</emo>今天天气真不错！"
+解析: { emotion: "高兴", text: "今天天气真不错！", ready: true }
+
+消息 content += "今天天气真不错！"  // 无标签
+TTS(text, "高兴")              // 用情感播放
+记忆 += "今天天气真不错！"      // 无标签
+```
+
+### 10.5 代码设计
+
+```typescript
+function processChunk(chunk: string, state: ParserState): { state: ParserState, text: string, emotion: string | null } {
+  // 状态机解析...
+  // 只返回纯净文本用于存储
+  return { state, text: pureText, emotion: currentEmotion }
+}
+
+// 使用
+const { text, emotion } = processChunk(chunk, parserState)
+if (text) {
+  // 更新消息（显示）
+  updateMessage(text)
+  // 触发 TTS（使用情感）
+  if (emotion) {
+    ttsStore.speakWithEmotion(text, emotion)
+  }
+  // 存储到记忆（无情感标签）
+  memoryStore.append(text)
+}
+```
+
+---
+
+## 十一、实现模块清单
+
+### 11.1 前端
+
+| 文件 | 改动 |
+|------|------|
+| `stores/chat.ts` | 流式/非流式处理集成情感解析 |
+| `stores/tts.ts` | `speakWithEmotion` 方法 |
+| `utils/emotion.ts` | 新增情感解析状态机 |
+| `pages/chat/index.vue` | 无改动（只显示纯文本） |
+
+### 11.2 后端
+
+| 文件 | 改动 |
+|------|------|
+| `tts.rs` | `tts_speak` 支持传入情感参数 |
+
+### 11.3 配置
+
+| 文件 | 改动 |
+|------|------|
+| `config.rs` | TTSConfig 添加 `emotion_auto` |
+
+---
+
+## 十二、版本历史
+
+| 版本 | 日期 | 说明 |
+|------|------|------|
+| 1.0 | 2026-04-02 | 初始设计 |
+| 2.0 | 2026-04-02 | 补充聊天记录不记录情感标签、模块清单 |
