@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
+import { EMOTION_MAP, DEFAULT_EMOTION } from '@/utils/emotion'
 
 interface TTSConfig {
   enabled: boolean
@@ -46,6 +47,10 @@ export const useTTSStore = defineStore('tts', () => {
 
   // TTS buffer for streaming
   const ttsBuffer = ref('')
+  
+  // Current emotion for TTS
+  const currentEmotion = ref<string>(DEFAULT_EMOTION)
+  const emotionAutoEnabled = ref(false)
 
   // Initialize
   async function init() {
@@ -55,6 +60,8 @@ export const useTTSStore = defineStore('tts', () => {
       isEnabled.value = config.value.enabled
       isStreamMode.value = config.value.stream_enabled
       currentVoiceId.value = config.value.default_voice_id
+      // @ts-ignore - emotion_auto may not exist in old config
+      emotionAutoEnabled.value = config.value.emotion_auto ?? false
     } catch (err) {
       console.error('[TTS] Failed to load config:', err)
     }
@@ -260,6 +267,45 @@ export const useTTSStore = defineStore('tts', () => {
     }
   }
 
+  // Speak with specific emotion
+  async function speakWithEmotion(text: string, emotion: string, voiceId?: string): Promise<void> {
+    if (!isEnabled.value) {
+      console.warn('[TTS] TTS is disabled')
+      return
+    }
+
+    // Normalize emotion to audio file
+    const emotionFile = EMOTION_MAP[emotion] || DEFAULT_EMOTION
+    
+    try {
+      const audioUrl = await invoke<string>('tts_speak_with_emotion', {
+        text,
+        emotion: emotionFile,
+        voiceId: voiceId || null
+      })
+      enqueue(audioUrl, text)
+    } catch (err) {
+      console.error('[TTS] speakWithEmotion error:', err)
+      // Fallback to regular speak
+      speak(text, voiceId).catch(console.error)
+    }
+  }
+
+  // Set current emotion
+  function setEmotion(emotion: string): void {
+    currentEmotion.value = EMOTION_MAP[emotion] || DEFAULT_EMOTION
+  }
+
+  // Get current emotion
+  function getEmotion(): string {
+    return currentEmotion.value
+  }
+
+  // Enable/disable emotion auto
+  function setEmotionAuto(enabled: boolean): void {
+    emotionAutoEnabled.value = enabled
+  }
+
   // Stream speak - receives chunk, accumulates, triggers TTS when threshold met
   async function speakStream(chunk: string): Promise<void> {
     if (!isEnabled.value || !isStreamMode.value) return
@@ -281,8 +327,12 @@ export const useTTSStore = defineStore('tts', () => {
     if (isEndMark || isTooLong || (isLongComma && len >= threshold)) {
       const text = flushBuffer()
       if (text) {
-        // Async TTS, don't wait
-        speak(text).catch(console.error)
+        // Async TTS with current emotion, don't wait
+        if (emotionAutoEnabled.value) {
+          speakWithEmotion(text, currentEmotion.value).catch(console.error)
+        } else {
+          speak(text).catch(console.error)
+        }
       }
     }
   }
@@ -323,6 +373,8 @@ export const useTTSStore = defineStore('tts', () => {
       config.value = await invoke<TTSConfig>('get_tts_config')
       isEnabled.value = config.value.enabled
       isStreamMode.value = config.value.stream_enabled
+      // @ts-ignore - emotion_auto may not exist in old config
+      emotionAutoEnabled.value = config.value.emotion_auto ?? false
     } catch (err) {
       console.error('[TTS] Failed to reload config:', err)
     }
@@ -341,10 +393,13 @@ export const useTTSStore = defineStore('tts', () => {
     currentText,
     isFading,
     ttsBuffer,
+    currentEmotion,
+    emotionAutoEnabled,
 
     // Methods
     init,
     speak,
+    speakWithEmotion,
     speakStream,
     stop,
     pause,
@@ -356,6 +411,9 @@ export const useTTSStore = defineStore('tts', () => {
     clearBuffer,
     setEnabled,
     setStreamMode,
+    setEmotion,
+    getEmotion,
+    setEmotionAuto,
     reloadConfig,
     getThreshold,
     getMaxBuffer,

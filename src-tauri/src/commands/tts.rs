@@ -527,3 +527,125 @@ pub fn get_current_character_voice_id_internal() -> Option<String> {
     let char_config = crate::commands::config::load_character(current_char_id).ok()?;
     char_config.voice_id
 }
+
+/// TTS speak with specific emotion (for emotion-based TTS)
+#[tauri::command]
+pub async fn tts_speak_with_emotion(
+    text: String,
+    emotion: String,       // Emotion file name, e.g., "高兴.wav"
+    voice_id: Option<String>,
+    msg_id: Option<String>,
+    seq: Option<u32>,
+    _app_handle: tauri::AppHandle,
+) -> Result<String, String> {
+    let config = load_config()?;
+    let tts_config = &config.tts;
+    
+    if !tts_config.enabled {
+        return Err("TTS is disabled".to_string());
+    }
+    
+    if text.is_empty() {
+        return Err("Text is empty".to_string());
+    }
+    
+    // Get speaker from voice config
+    let speaker = if let Some(ref vid) = voice_id {
+        tts_config.voices.get(vid).map(|v| v.speaker.clone())
+    } else {
+        tts_config.voices.get(&tts_config.default_voice_id)
+            .map(|v| v.speaker.clone())
+    }.unwrap_or_else(|| "苏瑶".to_string());
+    
+    // Use the provided emotion directly
+    let emo = emotion;
+    let emo_method = "使用情感描述文本控制".to_string();
+    let speed = voice_id.and_then(|vid| tts_config.voices.get(&vid).and_then(|v| v.speed))
+        .or_else(|| tts_config.voices.get(&tts_config.default_voice_id).and_then(|v| v.speed))
+        .unwrap_or(1.0);
+    
+    // Check cache first (only for non-archived requests)
+    if msg_id.is_none() {
+        let cache_dir = get_tts_cache_dir();
+        let cache_key = generate_cache_key(&text, &speaker, &emo, &emo_method, speed);
+        let cache_path = cache_dir.join(format!("{}.wav", cache_key));
+        
+        if cache_path.exists() {
+            return Ok(format!("file://{}", cache_path.to_string_lossy()));
+        }
+    }
+    
+    // Call IndexTTS API
+    let client = Client::builder()
+        .timeout(std::time::Duration::from_secs(60))
+        .build()
+        .map_err(|e| e.to_string())?;
+    
+    let url = format!("{}/run/submit_and_refresh", tts_config.base_url);
+    
+    // Parse emo text (remove .wav extension if present)
+    let emo_text = emo.replace(".wav", "");
+    
+    let request_body = json!({
+        "voices_dropdown": speaker,
+        "speed": speed,
+        "text": text,
+        "emo_control_method": emo_method,
+        "emo_weight": 0.8,
+        "emo_text": emo_text,
+        "emo_random": false,
+        "max_tokens": 100,
+        "do_sample": true,
+        "temperature": 0.7,
+        "top_p": 0.9,
+        "top_k": 50
+    });
+    
+    let response = client
+        .post(&url)
+        .json(&request_body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    
+    if !response.status().is_success() {
+        let status = response.status();
+        let error_text = response.text().await.unwrap_or_default();
+        return Err(format!("TTS API error ({}): {}", status, error_text));
+    }
+    
+    // Parse response to get audio URL
+    let result: SubmitResponse = response.json().await.map_err(|e| e.to_string())?;
+    
+    // Construct audio URL from path or url
+    let audio_url = if let Some(output) = result.output {
+        if let Some(file_data) = output.output_1 {
+            if let Some(url) = file_data.url {
+                url
+            } else if let Some(path) = file_data.path {
+                format!("{}/file={}", tts_config.base_url.trim_end_matches('/'), path)
+            } else {
+                return Err("No audio URL or path in response".to_string());
+            }
+        } else {
+            return Err("No output_1 in response".to_string());
+        }
+    } else {
+        return Err("No output in response".to_string());
+    };
+    
+    // Download and save to archive
+    let audio_response = client.get(&audio_url).send().await.map_err(|e| e.to_string())?;
+    let audio_bytes = audio_response.bytes().await.map_err(|e| e.to_string())?;
+    
+    // Save to archive and return local path
+    let local_path = save_audio_to_archive(&audio_bytes, &msg_id, seq)?;
+    
+    // Also cache it for non-archived requests
+    let cache_dir = get_tts_cache_dir();
+    let cache_key = generate_cache_key(&text, &speaker, &emo, &emo_method, speed);
+    let cache_path = cache_dir.join(format!("{}.wav", cache_key));
+    let _ = fs::write(&cache_path, &audio_bytes);
+    
+    Ok(format!("file://{}", local_path))
+}

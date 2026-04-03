@@ -88,6 +88,9 @@ pub struct TTSConfig {
     pub stream_min_chunk: u32,
     #[serde(default = "default_fade_duration")]
     pub fade_duration: u32,
+    // 情感自动识别配置
+    #[serde(default)]
+    pub emotion_auto: bool,
 }
 
 fn default_trigger_threshold() -> u32 { 20 }
@@ -109,6 +112,7 @@ impl Default for TTSConfig {
             stream_max_buffer: 50,
             stream_min_chunk: 5,
             fade_duration: 200,
+            emotion_auto: false,
         }
     }
 }
