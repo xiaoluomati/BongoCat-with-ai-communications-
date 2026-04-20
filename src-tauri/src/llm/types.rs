@@ -71,7 +71,7 @@ pub struct ChatResponse {
 pub enum LLMProvider {
     DeepSeek,
     Minimax,
-    Ollama,
+    LlamaCpp,
 }
 
 impl Default for LLMProvider {
@@ -85,7 +85,7 @@ impl std::fmt::Display for LLMProvider {
         match self {
             LLMProvider::DeepSeek => write!(f, "deepseek"),
             LLMProvider::Minimax => write!(f, "minimax"),
-            LLMProvider::Ollama => write!(f, "ollama"),
+            LLMProvider::LlamaCpp => write!(f, "llama.cpp"),
         }
     }
 }

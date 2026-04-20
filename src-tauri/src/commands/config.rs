@@ -28,7 +28,6 @@ pub struct LLMConfigData {
     pub provider: String,
     pub deepseek: ProviderConfig,
     pub minimax: MinimaxConfig,
-    pub ollama: ProviderConfig,
     pub temperature: f32,
     pub max_tokens: u32,
     pub stream: bool,
@@ -181,7 +180,7 @@ pub fn get_llm_config() -> Result<LLMConfig, String> {
     let provider = match config.llm.provider.as_str() {
         "deepseek" => crate::llm::LLMProvider::DeepSeek,
         "minimax" => crate::llm::LLMProvider::Minimax,
-        "ollama" => crate::llm::LLMProvider::Ollama,
+        "llama.cpp" => crate::llm::LLMProvider::LlamaCpp,
         _ => crate::llm::LLMProvider::DeepSeek,
     };
     
@@ -196,10 +195,10 @@ pub fn get_llm_config() -> Result<LLMConfig, String> {
             "https://api.minimax.chat/v1".to_string(),
             config.llm.minimax.model,
         ),
-        crate::llm::LLMProvider::Ollama => (
-            config.llm.ollama.api_key,
-            config.llm.ollama.base_url,
-            config.llm.ollama.model,
+        crate::llm::LLMProvider::LlamaCpp => (
+            config.llm.deepseek.api_key,
+            config.llm.deepseek.base_url,
+            config.llm.deepseek.model,
         ),
     };
     

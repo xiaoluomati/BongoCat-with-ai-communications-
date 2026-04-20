@@ -429,22 +429,3 @@ pub async fn check_llm_available(
     Ok(llm_manager.is_available().await)
 }
 
-/// Get available models from Ollama server
-#[tauri::command]
-pub async fn get_ollama_models() -> Result<Vec<String>, String> {
-    // Get the current Ollama configuration
-    let config = crate::commands::get_llm_config().map_err(|e| e.to_string())?;
-    
-    // Only works if current provider is Ollama
-    if config.provider != crate::llm::LLMProvider::Ollama {
-        return Err("当前提供商不是 Ollama".to_string());
-    }
-    
-    // Create a temporary client to list models
-    let client = crate::llm::OllamaClient::new(
-        Some(config.base_url),
-        Some(config.model),
-    );
-    
-    client.list_models().await.map_err(|e| e.to_string())
-}

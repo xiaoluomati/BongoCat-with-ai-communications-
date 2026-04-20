@@ -12,34 +12,30 @@ const enabled = ref(false)
 const provider = ref('deepseek')
 const apiKey = ref('')
 const baseHost = ref('http://localhost')
-const basePort = ref(11434)
+const basePort = ref(8080)
 const model = ref('deepseek-chat')
 const temperature = ref(0.8)
 const maxTokens = ref(500)
 const stream = ref(false)
 const testingConnection = ref(false)
-const ollamaModels = ref<{ value: string; label: string }[]>([])
-const fetchingModels = ref(false)
 const connectionStatus = ref<'unknown' | 'success' | 'failed'>('unknown')
 
 const providers = [
-  { value: 'ollama', label: 'Ollama (本地)' },
+  { value: 'llama.cpp', label: 'Llama.cpp (本地)' },
   { value: 'deepseek', label: 'DeepSeek' },
   { value: 'minimax', label: 'MiniMax' },
 ]
 
 const defaultModels: Record<string, string> = {
-  ollama: 'llama2',
+  'llama.cpp': 'llama-3.2-1b-instruct-q4_K_M.gguf',
   deepseek: 'deepseek-chat',
   minimax: 'MiniMax-M2.7',
 }
 
 const modelOptions: Record<string, { value: string; label: string }[]> = {
-  ollama: [
-    { value: 'llama2', label: 'llama2' },
-    { value: 'llama3', label: 'llama3' },
-    { value: 'qwen2.5', label: 'qwen2.5' },
-    { value: 'deepseek-coder', label: 'deepseek-coder' },
+  'llama.cpp': [
+    { value: 'llama-3.2-1b-instruct-q4_K_M.gguf', label: 'Llama 3.2 1B Q4' },
+    { value: 'llama-3.2-3b-instruct-q4_K_M.gguf', label: 'Llama 3.2 3B Q4' },
   ],
   deepseek: [
     { value: 'deepseek-chat', label: 'deepseek-chat' },
@@ -57,9 +53,6 @@ const modelOptions: Record<string, { value: string; label: string }[]> = {
 }
 
 const currentModels = () => {
-  if (provider.value === 'ollama' && ollamaModels.value.length > 0) {
-    return ollamaModels.value
-  }
   return modelOptions[provider.value] || modelOptions.deepseek
 }
 
@@ -113,12 +106,14 @@ async function loadProviderConfig() {
 
 // 获取默认 base_url
 function getDefaultBaseUrl(): string {
-  return provider.value === 'ollama' ? 'http://localhost' : ''
+  if (provider.value === 'llama.cpp') return 'http://localhost'
+  return ''
 }
 
 // 获取默认端口
 function getDefaultPort(): number {
-  return provider.value === 'ollama' ? 11434 : 0
+  if (provider.value === 'llama.cpp') return 8080
+  return 0
 }
 
 // 监听提供商变化
@@ -183,39 +178,11 @@ async function testConnection() {
   }
 }
 
-// 获取 Ollama 模型列表
-async function fetchOllamaModels() {
-  if (provider.value !== 'ollama') return
-  
-  fetchingModels.value = true
-  try {
-    // 先保存当前配置以确保 base_url 正确
-    await saveConfig()
-    const models = await invoke<string[]>('get_ollama_models')
-    ollamaModels.value = models.map(m => ({ value: m, label: m }))
-    if (models.length > 0 && !models.includes(model.value)) {
-      model.value = models[0]
-    }
-  } catch (err) {
-    console.error('Failed to fetch Ollama models:', err)
-    message.error('获取模型列表失败: ' + err)
-  } finally {
-    fetchingModels.value = false
-  }
-}
-
 // Watch provider change to update model list
 function onProviderChange() {
   model.value = defaultModels[provider.value]
   baseHost.value = getDefaultBaseUrl()
   basePort.value = getDefaultPort()
-  
-  // 如果切换到 Ollama，获取模型列表
-  if (provider.value === 'ollama') {
-    fetchOllamaModels()
-  } else {
-    ollamaModels.value = []
-  }
 }
 </script>
 
@@ -246,7 +213,7 @@ function onProviderChange() {
 
       <!-- API Key -->
       <ProListItem
-        v-if="enabled && provider !== 'ollama'"
+        v-if="enabled && provider !== 'llama.cpp'"
         description="请输入 API Key"
         title="API Key"
       >
@@ -258,10 +225,10 @@ function onProviderChange() {
         />
       </ProListItem>
 
-      <!-- Base URL (仅 Ollama 显示) -->
+      <!-- Base URL (仅本地 Provider 显示) -->
       <ProListItem
-        v-if="enabled && provider === 'ollama'"
-        description="Ollama 服务地址"
+        v-if="enabled && provider === 'llama.cpp'"
+        description="服务地址"
         title="服务地址"
       >
         <div class="flex items-center gap-2">
@@ -277,7 +244,7 @@ function onProviderChange() {
             :min="1"
             :max="65535"
             :step="1"
-            placeholder="11434"
+            placeholder="8080"
           />
         </div>
       </ProListItem>
@@ -288,22 +255,11 @@ function onProviderChange() {
         description="选择对话模型"
         title="模型"
       >
-        <div class="flex items-center gap-2">
-          <Select
-            v-model:value="model"
-            class="w-48"
-            :options="currentModels()"
-            :loading="fetchingModels && provider === 'ollama'"
-          />
-          <Button
-            v-if="provider === 'ollama'"
-            size="small"
-            :loading="fetchingModels"
-            @click="fetchOllamaModels"
-          >
-            刷新
-          </Button>
-        </div>
+        <Select
+          v-model:value="model"
+          class="w-48"
+          :options="currentModels()"
+        />
       </ProListItem>
 
       <!-- Temperature -->

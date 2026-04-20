@@ -28,6 +28,8 @@ interface TTSConfig {
   stream_max_buffer: number
   stream_min_chunk: number
   fade_duration: number
+  emotion_auto: boolean
+  emo_weight: number
 }
 
 const enabled = ref(false)
@@ -38,6 +40,8 @@ const streamTriggerThreshold = ref(20)
 const streamMaxBuffer = ref(50)
 const streamMinChunk = ref(5)
 const fadeDuration = ref(200)
+const emotionAuto = ref(false)
+const emoWeight = ref(0.8)
 const voices = ref<Record<string, VoiceConfig>>({})
 const defaultVoiceId = ref('suyao')
 const testingConnection = ref(false)
@@ -91,6 +95,8 @@ onMounted(async () => {
     streamMaxBuffer.value = config.stream_max_buffer ?? 50
     streamMinChunk.value = config.stream_min_chunk ?? 5
     fadeDuration.value = config.fade_duration ?? 200
+    emotionAuto.value = config.emotion_auto ?? false
+    emoWeight.value = config.emo_weight ?? 0.8
   } catch (err) {
     console.error('Failed to load TTS config:', err)
   }
@@ -120,13 +126,14 @@ async function saveConfig() {
       base_url: baseUrl.value,
       default_voice_id: defaultVoiceId.value,
       volume: volume.value,
-      speed: volume.value,
       voices: voices.value,
       stream_enabled: streamEnabled.value,
       stream_trigger_threshold: streamTriggerThreshold.value,
       stream_max_buffer: streamMaxBuffer.value,
       stream_min_chunk: streamMinChunk.value,
-      fade_duration: fadeDuration.value
+      fade_duration: fadeDuration.value,
+      emotion_auto: emotionAuto.value,
+      emo_weight: emoWeight.value
     }
     await invoke('save_tts_config', { ttsConfig: config })
     // Don't show message here to avoid spam
@@ -257,6 +264,33 @@ async function clearCache() {
           title="流式模式"
         >
           <Switch v-model:checked="streamEnabled" @change="saveConfig" />
+        </ProListItem>
+
+        <!-- Emotion Auto -->
+        <ProListItem
+          v-if="enabled"
+          description="根据 AI 回复情感标签自动切换情感"
+          title="情感自动识别"
+        >
+          <Switch v-model:checked="emotionAuto" @change="saveConfig" />
+        </ProListItem>
+
+        <!-- Emotion Weight -->
+        <ProListItem
+          v-if="enabled"
+          description="情感强度（0.1-1.6）"
+          title="情感强度"
+        >
+          <div class="w-48">
+            <Slider
+              v-model:value="emoWeight"
+              :min="0.1"
+              :max="1.6"
+              :step="0.1"
+              :marks="{ 0.1: '0.1', 0.8: '0.8', 1.6: '1.6' }"
+              @afterChange="saveConfig"
+            />
+          </div>
         </ProListItem>
 
         <!-- Stream Parameters -->

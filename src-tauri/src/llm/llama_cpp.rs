@@ -1,4 +1,5 @@
-//! Ollama LLM Client Implementation
+//! Llama.cpp LLM Client Implementation
+//! Compatible with llama.cpp server's OpenAI-compatible HTTP API
 
 use crate::llm::types::{ChatMessage, ChatRequest, ChatResponse};
 use crate::llm::LLMError;
@@ -6,12 +7,12 @@ use futures::StreamExt;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
-const API_URL: &str = "http://localhost:11434";
+const API_URL: &str = "http://localhost:8080";
 const CHAT_API_PATH: &str = "/v1/chat/completions";
 const MODELS_API_PATH: &str = "/api/tags";
 
 #[derive(Debug, Serialize)]
-struct OllamaRequest {
+struct LlamaCppRequest {
     model: String,
     messages: Vec<ChatMessage>,
     temperature: f32,
@@ -20,7 +21,7 @@ struct OllamaRequest {
 }
 
 #[derive(Debug, Deserialize)]
-struct OllamaResponse {
+struct LlamaCppResponse {
     choices: Vec<Choice>,
 }
 
@@ -34,7 +35,7 @@ struct Message {
     content: String,
 }
 
-/// Stream chunk from Ollama API
+/// Stream chunk from Llama.cpp API
 #[derive(Debug, Deserialize)]
 struct StreamChunk {
     choices: Option<Vec<StreamChoice>>,
@@ -50,33 +51,34 @@ struct StreamDelta {
     content: Option<String>,
 }
 
-/// Model info from /api/tags
+/// Model info from /api/tags (llama.cpp format)
 #[derive(Debug, Deserialize)]
-struct ModelsResponse {
-    models: Vec<ModelInfo>,
+struct LlamaCppModelsResponse {
+    models: Vec<LlamaCppModelInfo>,
 }
 
 #[derive(Debug, Deserialize)]
-struct ModelInfo {
+struct LlamaCppModelInfo {
+    #[serde(rename = "name")]
     name: String,
 }
 
-pub struct OllamaClient {
+pub struct LlamaCppClient {
     client: Client,
     base_url: String,
     model: String,
 }
 
-impl OllamaClient {
+impl LlamaCppClient {
     pub fn new(base_url: Option<String>, model: Option<String>) -> Self {
         Self {
             client: Client::new(),
             base_url: base_url.unwrap_or_else(|| API_URL.to_string()),
-            model: model.unwrap_or_else(|| "llama2".to_string()),
+            model: model.unwrap_or_else(|| "llama-3.2-1b-instruct-q4_k_m.gguf".to_string()),
         }
     }
 
-    /// List available models from Ollama
+    /// List available models from llama.cpp
     pub async fn list_models(&self) -> Result<Vec<String>, LLMError> {
         let url = format!("{}{}", self.base_url, MODELS_API_PATH);
         
@@ -92,15 +94,15 @@ impl OllamaClient {
         if !status.is_success() {
             let error_text = response.text().await.unwrap_or_default();
             return Err(LLMError::Api(format!(
-                "Ollama API error ({}): {}",
+                "Llama.cpp API error ({}): {}",
                 status,
                 error_text
             )));
         }
 
-        let models_response: ModelsResponse = response.json().await?;
+        let result: LlamaCppModelsResponse = response.json().await?;
         
-        let model_names = models_response
+        let model_names = result
             .models
             .into_iter()
             .map(|m| m.name)
@@ -111,7 +113,7 @@ impl OllamaClient {
 
     /// Non-streaming chat
     pub async fn chat(&self, request: ChatRequest) -> Result<ChatResponse, LLMError> {
-        let ollama_request = OllamaRequest {
+        let llama_cpp_request = LlamaCppRequest {
             model: request.model,
             messages: request.messages,
             temperature: request.temperature,
@@ -125,7 +127,7 @@ impl OllamaClient {
             .client
             .post(&url)
             .header("Content-Type", "application/json")
-            .json(&ollama_request)
+            .json(&llama_cpp_request)
             .send()
             .await?;
 
@@ -134,15 +136,15 @@ impl OllamaClient {
         if !status.is_success() {
             let error_text = response.text().await.unwrap_or_default();
             return Err(LLMError::Api(format!(
-                "Ollama API error ({}): {}",
+                "Llama.cpp API error ({}): {}",
                 status,
                 error_text
             )));
         }
 
-        let ollama_response: OllamaResponse = response.json().await?;
+        let llama_cpp_response: LlamaCppResponse = response.json().await?;
 
-        let content = ollama_response
+        let content = llama_cpp_response
             .choices
             .first()
             .map(|c| c.message.content.clone())
@@ -159,7 +161,7 @@ impl OllamaClient {
     where
         F: FnMut(String) + Send,
     {
-        let ollama_request = OllamaRequest {
+        let llama_cpp_request = LlamaCppRequest {
             model: request.model.clone(),
             messages: request.messages,
             temperature: request.temperature,
@@ -173,7 +175,7 @@ impl OllamaClient {
             .client
             .post(&url)
             .header("Content-Type", "application/json")
-            .json(&ollama_request)
+            .json(&llama_cpp_request)
             .send()
             .await?;
 
@@ -182,7 +184,7 @@ impl OllamaClient {
         if !status.is_success() {
             let error_text = response.text().await.unwrap_or_default();
             return Err(LLMError::Api(format!(
-                "Ollama API error ({}): {}",
+                "Llama.cpp API error ({}): {}",
                 status,
                 error_text
             )));
@@ -241,7 +243,18 @@ impl OllamaClient {
     }
 
     pub async fn is_available(&self) -> bool {
-        // Try to list models to check if Ollama is running
-        self.list_models().await.is_ok()
+        use std::time::Duration;
+        // 超时2秒，最多重试3次，间隔1秒
+        for attempt in 0..3 {
+            match tokio::time::timeout(Duration::from_secs(2), self.list_models()).await {
+                Ok(Ok(_)) => return true,
+                _ => {
+                    if attempt < 2 {
+                        tokio::time::sleep(Duration::from_secs(1)).await;
+                    }
+                }
+            }
+        }
+        false
     }
 }

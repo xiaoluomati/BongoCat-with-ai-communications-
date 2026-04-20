@@ -5,12 +5,12 @@ use thiserror::Error;
 
 pub mod deepseek;
 pub mod minimax;
-pub mod ollama;
+pub mod llama_cpp;
 pub mod types;
 
 pub use deepseek::DeepSeekClient;
 pub use minimax::MinimaxClient;
-pub use ollama::OllamaClient;
+pub use llama_cpp::LlamaCppClient;
 pub use types::{ChatMessage, ChatRequest, ChatResponse, LLMProvider};
 
 use std::sync::Arc;
@@ -63,7 +63,7 @@ impl Default for LLMConfig {
 pub struct LLMManager {
     deepseek_client: Arc<RwLock<Option<DeepSeekClient>>>,
     minimax_client: Arc<RwLock<Option<MinimaxClient>>>,
-    ollama_client: Arc<RwLock<Option<OllamaClient>>>,
+    llama_cpp_client: Arc<RwLock<Option<LlamaCppClient>>>,
     config: LLMConfig,
 }
 
@@ -72,7 +72,7 @@ impl LLMManager {
         Self {
             deepseek_client: Arc::new(RwLock::new(None)),
             minimax_client: Arc::new(RwLock::new(None)),
-            ollama_client: Arc::new(RwLock::new(None)),
+            llama_cpp_client: Arc::new(RwLock::new(None)),
             config,
         }
     }
@@ -96,12 +96,12 @@ impl LLMManager {
                 let mut lock = self.minimax_client.write().await;
                 *lock = Some(client);
             }
-            LLMProvider::Ollama => {
-                let client = OllamaClient::new(
+            LLMProvider::LlamaCpp => {
+                let client = LlamaCppClient::new(
                     Some(self.config.base_url.clone()),
                     Some(self.config.model.clone()),
                 );
-                let mut lock = self.ollama_client.write().await;
+                let mut lock = self.llama_cpp_client.write().await;
                 *lock = Some(client);
             }
         }
@@ -128,8 +128,8 @@ impl LLMManager {
                     false
                 }
             }
-            LLMProvider::Ollama => {
-                let lock = self.ollama_client.read().await;
+            LLMProvider::LlamaCpp => {
+                let lock = self.llama_cpp_client.read().await;
                 if let Some(client) = lock.as_ref() {
                     client.is_available().await
                 } else {
@@ -163,10 +163,10 @@ impl LLMManager {
                 })?;
                 client.chat(request).await
             }
-            LLMProvider::Ollama => {
-                let lock = self.ollama_client.read().await;
+            LLMProvider::LlamaCpp => {
+                let lock = self.llama_cpp_client.read().await;
                 let client = lock.as_ref().ok_or_else(|| {
-                    LLMError::ProviderUnavailable("Ollama client not initialized".to_string())
+                    LLMError::ProviderUnavailable("LlamaCpp client not initialized".to_string())
                 })?;
                 client.chat(request).await
             }
@@ -200,10 +200,10 @@ impl LLMManager {
                 })?;
                 client.chat_stream(request, on_chunk).await
             }
-            LLMProvider::Ollama => {
-                let lock = self.ollama_client.read().await;
+            LLMProvider::LlamaCpp => {
+                let lock = self.llama_cpp_client.read().await;
                 let client = lock.as_ref().ok_or_else(|| {
-                    LLMError::ProviderUnavailable("Ollama client not initialized".to_string())
+                    LLMError::ProviderUnavailable("LlamaCpp client not initialized".to_string())
                 })?;
                 client.chat_stream(request, on_chunk).await
             }

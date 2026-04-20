@@ -16,7 +16,8 @@ export enum ParseState {
 
 // 解析结果
 export interface ParseResult {
-  emotion: string      // 解析出的情感（用于TTS）
+  emotion: string      // 最后一个解析出的情感（用于TTS，向后兼容）
+  emotions: string[]   // 所有解析出的情感数组
   text: string         // 累积的正文（无标签，用于显示）
   ready: boolean       // 是否解析完成
 }
@@ -26,7 +27,8 @@ export interface ParserContext {
   state: ParseState
   buffer: string       // 当前累积的文本
   tagBuffer: string    // 标签缓冲区
-  emotion: string      // 已解析的情感
+  emotion: string      // 已解析的情感（最后一个）
+  emotions: string[]   // 所有已解析的情感数组
   text: string         // 已解析的纯文本
 }
 
@@ -59,6 +61,7 @@ export function createParserContext(): ParserContext {
     buffer: '',
     tagBuffer: '',
     emotion: '',
+    emotions: [],
     text: '',
   }
 }
@@ -138,7 +141,10 @@ function parseChar(ctx: ParserContext, char: string): ParserContext {
     case ParseState.TAG_CLOSE:
       newCtx.tagBuffer += char
       if (newCtx.tagBuffer === '</emo>') {
-        // 完整标签解析完成
+        // 完整标签解析完成，收集情感到数组
+        let normalized = normalizeEmotion(ctx.tagBuffer)
+        newCtx.emotion = normalized
+        newCtx.emotions = [...ctx.emotions, normalized]
         newCtx.state = ParseState.READY
         newCtx.tagBuffer = ''
       } else if (!'</emo>'.startsWith(newCtx.tagBuffer)) {
@@ -170,9 +176,8 @@ export function parseEmotionChunk(
   }
   
   const result: ParseResult = {
-    emotion: currentCtx.state === ParseState.READY 
-      ? normalizeEmotion(currentCtx.emotion)
-      : (currentCtx.emotion ? normalizeEmotion(currentCtx.emotion) : ''),
+    emotion: currentCtx.emotion || '',
+    emotions: currentCtx.emotions,
     text: currentCtx.text,
     ready: currentCtx.state === ParseState.READY,
   }
@@ -183,6 +188,7 @@ export function parseEmotionChunk(
       ...currentCtx,
       state: ParseState.TEXT,
       emotion: '',
+      emotions: currentCtx.emotions,
       text: '',
     }
   }
