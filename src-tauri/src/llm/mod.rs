@@ -50,8 +50,8 @@ impl Default for LLMConfig {
         Self {
             provider: LLMProvider::DeepSeek,
             api_key: String::new(),
-            base_url: "https://api.deepseek.com/v1".to_string(),
-            model: "deepseek-chat".to_string(),
+            base_url: "https://api.deepseek.com".to_string(),
+            model: "deepseek-v4-flash".to_string(),
             temperature: 0.8,
             max_tokens: 500,
             stream: false,

@@ -90,6 +90,12 @@ pub struct TTSConfig {
     // 情感自动识别配置
     #[serde(default)]
     pub emotion_auto: bool,
+    #[serde(default = "default_emo_weight")]
+    pub emo_weight: f32,
+}
+
+fn default_emo_weight() -> f32 {
+    0.8
 }
 
 fn default_trigger_threshold() -> u32 { 20 }
@@ -112,6 +118,7 @@ impl Default for TTSConfig {
             stream_min_chunk: 5,
             fade_duration: 200,
             emotion_auto: false,
+            emo_weight: 0.8,
         }
     }
 }

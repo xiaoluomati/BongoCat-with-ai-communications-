@@ -116,9 +116,9 @@ mod tests {
             ChatMessage::user("Meow"),
         ];
         
-        let request = ChatRequest::new("deepseek-chat", messages);
+        let request = ChatRequest::new("deepseek-v4-flash", messages);
         
-        assert_eq!(request.model, "deepseek-chat");
+        assert_eq!(request.model, "deepseek-v4-flash");
         assert_eq!(request.messages.len(), 2);
         assert_eq!(request.temperature, 0.8);
         assert_eq!(request.max_tokens, 500);
@@ -127,7 +127,7 @@ mod tests {
     #[test]
     fn test_chat_request_with_params() {
         let messages = vec![ChatMessage::user("Test")];
-        let request = ChatRequest::new("deepseek-chat", messages)
+        let request = ChatRequest::new("deepseek-v4-flash", messages)
             .with_params(0.5, 200);
         
         assert_eq!(request.temperature, 0.5);

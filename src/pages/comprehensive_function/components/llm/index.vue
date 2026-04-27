@@ -13,7 +13,7 @@ const provider = ref('deepseek')
 const apiKey = ref('')
 const baseHost = ref('http://localhost')
 const basePort = ref(8080)
-const model = ref('deepseek-chat')
+const model = ref('deepseek-v4-flash')
 const temperature = ref(0.8)
 const maxTokens = ref(500)
 const stream = ref(false)
@@ -28,7 +28,7 @@ const providers = [
 
 const defaultModels: Record<string, string> = {
   'llama.cpp': 'llama-3.2-1b-instruct-q4_K_M.gguf',
-  deepseek: 'deepseek-chat',
+  deepseek: 'deepseek-v4-flash',
   minimax: 'MiniMax-M2.7',
 }
 
@@ -38,8 +38,8 @@ const modelOptions: Record<string, { value: string; label: string }[]> = {
     { value: 'llama-3.2-3b-instruct-q4_K_M.gguf', label: 'Llama 3.2 3B Q4' },
   ],
   deepseek: [
-    { value: 'deepseek-chat', label: 'deepseek-chat' },
-    { value: 'deepseek-reasoner', label: 'deepseek-reasoner' },
+    { value: 'deepseek-v4-flash', label: 'deepseek-v4-flash' },
+    { value: 'deepseek-v4-pro', label: 'deepseek-v4-pro' },
   ],
   minimax: [
     { value: 'MiniMax-M2.7', label: 'MiniMax-M2.7 (推荐)' },

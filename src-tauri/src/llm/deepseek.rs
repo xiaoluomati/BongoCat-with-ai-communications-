@@ -10,7 +10,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const API_URL: &str = "https://api.deepseek.com/v1/chat/completions";
+const API_URL: &str = "https://api.deepseek.com/chat/completions";
 
 /// Log the request to a local file for debugging
 fn log_request(request: &DeepSeekRequest) -> Result<(), std::io::Error> {
@@ -111,7 +111,7 @@ impl DeepSeekClient {
         Self {
             client: Client::new(),
             api_key,
-            model: model.unwrap_or_else(|| "deepseek-chat".to_string()),
+            model: model.unwrap_or_else(|| "deepseek-v4-flash".to_string()),
         }
     }
 
