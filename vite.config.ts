@@ -3,7 +3,7 @@ import { env } from 'node:process'
 
 import vue from '@vitejs/plugin-vue'
 import UnoCSS from 'unocss/vite'
-import { defineConfig } from 'vite'
+import { defineConfig } from 'vitest/config'
 
 const host = env.TAURI_DEV_HOST
 
@@ -14,6 +14,11 @@ export default defineConfig(async () => ({
     alias: {
       '@': resolve(__dirname, 'src'),
     },
+  },
+  test: {
+    environment: 'happy-dom',
+    globals: true,
+    include: ['src/**/*.{test,spec}.{ts,tsx}'],
   },
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
