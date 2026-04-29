@@ -3,6 +3,7 @@
 pub mod chat;
 pub mod character;
 pub mod config;
+pub mod facts;
 pub mod memory;
 pub mod prompt;
 pub mod scheduler;
@@ -12,6 +13,11 @@ pub mod window;
 // Explicit re-exports - avoid glob re-exports due to naming conflicts
 pub use chat::*;
 pub use config::*;
+
+pub use facts::{
+    UserFact, Evidence, save_user_fact, get_user_facts, delete_user_fact,
+    merge_pending_facts, get_facts_count
+};
 
 // Memory - only export what doesn't conflict
 pub use memory::{
