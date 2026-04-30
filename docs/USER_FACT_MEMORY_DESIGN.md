@@ -2,7 +2,8 @@
 
 > 任务ID: JJC-20260429-002
 > 生成时间: 2026-04-29
-> 状态: 待皇上审阅批准后方可实施
+> 更新时间: 2026-04-30
+> 状态: 已批准实施（含6项改进建议）
 
 ---
 
@@ -113,9 +114,10 @@ build_full_context() 构建 system prompt 时：
 **存储结构：**
 
 ```
-data/memory/facts/{user_id}_facts.json
-data/memory/facts/pending_facts.jsonl   # 追加写入
-data/memory/facts/archive/               # 冷数据降级
+data/memory/facts/
+  pending_facts.jsonl      # 追加写入，待确认队列
+  facts.json               # 已确认事实（active 状态）
+  archive/                  # 冷数据降级
 ```
 
 ```rust
@@ -125,12 +127,21 @@ pub struct UserFact {
     pub subject: String,                // 主体："用户"
     pub predicate: String,             // 谓语："喜欢"
     pub object: String,                // 对象："火锅"
-    pub evidence: Evidence,             // 来源证据
+    pub evidence: Vec<Evidence>,      // 来源证据列表（可能多次确认）
     pub confidence: f32,               // 置信度 0.0~1.0
+    pub status: FactStatus,           // active | superseded | deleted
+    pub superseded_by: Option<String>, // 被哪个事实替代
+    pub replaces: Option<String>,      // 替代了哪个旧事实
     pub tags: Vec<String>,             // 标签：["饮食偏好"]
     pub created_at: i64,
     pub updated_at: i64,
-    pub access_count: u32,            // 访问次数（影响冷热）
+    pub access_count: i32,            // 访问次数（影响冷热）
+}
+
+pub enum FactStatus {
+    Active,
+    Superseded,
+    Deleted,
 }
 
 pub struct Evidence {
@@ -138,14 +149,9 @@ pub struct Evidence {
     pub message_id: String,
     pub snippet: String,              // 原文片段
 }
-
-pub struct FactStore {
-    pub facts: Vec<UserFact>,
-    pub version: String,
-}
 ```
 
-**存储路径：** `data/memory/facts/{user_id}_facts.json`
+**存储路径：** `data/memory/facts/facts.json`（单用户，固定文件名）
 
 **优点：**
 - 零新依赖（JSON 文件）
@@ -159,103 +165,7 @@ pub struct FactStore {
 
 ---
 
-### 方案B：SQLite 存储（关系型）
-
-**设计：**
-
-```rust
-// 使用 rusqlite 存储
-CREATE TABLE facts (
-    id TEXT PRIMARY KEY,
-    subject TEXT NOT NULL,
-    predicate TEXT NOT NULL,
-    object TEXT NOT NULL,
-    evidence_date TEXT,
-    evidence_message_id TEXT,
-    evidence_snippet TEXT,
-    confidence REAL DEFAULT 1.0,
-    created_at INTEGER,
-    updated_at INTEGER,
-    access_count INTEGER DEFAULT 0,
-    is_archived INTEGER DEFAULT 0
-);
-
-CREATE INDEX idx_subject ON facts(subject);
-CREATE INDEX idx_predicate ON facts(predicate);
-CREATE INDEX idx_object ON facts(object);
-CREATE INDEX idx_access_count ON facts(access_count);
-```
-
-**优点：**
-- SQL 查询高效，支持复杂条件
-- 内置事务，天然支持并发
-- 成熟稳定
-
-**缺点：**
-- 引入 `rusqlite` 依赖
-- 数据库迁移/调试稍复杂
-- 对于千条级别，JSON 性能无差异
-
----
-
-### 方案C：向量数据库（如 ChromaDB）
-
-**设计：**
-
-```rust
-// 每条事实 → 向量嵌入
-let embedding = embed_model.encode("用户喜欢火锅");
-// 存储到 ChromaDB
-collection.add([
-    EmbeddingRecord {
-        id: fact.id,
-        embedding,
-        document: "用户喜欢火锅",
-        metadata: fact.metadata,
-    }
-]);
-
-// 检索时
-let results = collection.query(
-    query_embeddings=[embed(user_query)],
-    n_results=5
-);
-```
-
-**优点：**
-- 语义匹配精准（"用户说过关于吃的内容" → 能召回"火锅"）
-
-**缺点：**
-- 引入 ChromaDB + embedding 模型
-- 过度工程化（几千条事实用不上）
-- 部署复杂度大幅增加
-- 嵌入式设备可能无法运行向量计算
-
----
-
-### 方案对比总结
-
-| 维度 | 方案A: JSON | 方案B: SQLite | 方案C: 向量DB |
-|------|-------------|---------------|---------------|
-| 新增依赖 | 0 | 1 (`rusqlite`) | 2+ (Chroma, embedding) |
-| 存储规模 | ~10,000条 | ~1,000,000条 | ~10,000条 |
-| 检索方式 | 遍历/标签 | SQL | 向量相似度 |
-| 语义检索 | ❌ | ❌ | ✅ |
-| 工程复杂度 | 低 | 中 | 高 |
-| 部署难度 | 无 | 低 | 高 |
-| 调试难度 | 低 | 中 | 高 |
-
-**推荐：方案A（JSON）**
-
-理由：
-1. 零新增依赖
-2. 用户量级决定不需要向量检索
-3. 与现有 memory 模块风格一致
-4. 千条事实内性能无问题
-
----
-
-## 四、数据流设计
+## 四、数据流设计（完整版）
 
 ### 4.1 完整数据流
 
@@ -276,30 +186,37 @@ let results = collection.query(
   积累最近5轮用户消息
          ↓
   调用 LLM 提取事实（batch）
-  Prompt: "从以下对话中提取用户事实：\n{messages}"
+         ↓
+  敏感信息检测 → 匹配屏蔽列表 → 丢弃
          ↓
   收到结构化事实列表
          ↓
   save_user_fact() → pending_facts.jsonl（追加写入）
          ↓
-  merge_pending_facts()（异步，每100条或每小时）
-    ├── 去重（完全匹配）
-    └── 写入 facts.json
+  merge_pending_facts()（定时任务，每20条或每10分钟）
+    ├── 置信度 < 0.7 → 标记为待确认，不合并到 facts.json
+    ├── 完全匹配 → 更新 access_count
+    ├── subject+predicate 相同但 object 不同 → 冲突处理
+    │     ├── 旧事实改为 superseded
+    │     ├── 新事实 active
+    │     └── 建立 superseded_by / replaces 关联
+    └── 合并写入 facts.json
          ↓
  Facts 存储完成
 
+UserProfile 同步（合并阶段）：
+  predicate ∈ {"喜欢", "不喜欢", "职业", "生日", "地点", "工作"} → 同步更新 UserProfile
+         ↓
+  build_full_context() 时同时注入 user_profile + active facts
+
 检索注入流程（每次对话构建 system prompt）：
   获取相关事实
-    ├── 方式1：按标签筛选（"饮食偏好"相关事实）
-    └── 方式2：LLM 语义检索（给 LLM 事实列表，让它选相关）
+    ├── 方式1：最近7天 + 高访问次数（简单策略）
+    └── 方式2：候选20条 → 轻量LLM筛选到3-5条
          ↓
   注入到 system prompt
-  Prompt: "以下是你已知的用户事实，请自然提起：\n{facts}"
          ↓
   对话时自然提起
-
-冷数据降级（90天未访问）：
-  facts.json → archive/{date}_facts.json
 ```
 
 ### 4.2 触发条件设计
@@ -335,8 +252,9 @@ fn should_extract_facts(messages: &[ChatMessage], last_extract_ts: u64) -> bool 
 规则：
 1. 只提取关于"用户"的事实（不是关于桌宠或其他人）
 2. 事实格式：subject + predicate + object
-3. 置信度：1.0=确定，0.8=很可能，0.6=可能
+3. 置信度：1.0=确定，0.8=很可能，0.6=可能，<0.6=不确定
 4. 每条事实附带原文片段（evidence）
+5. 排除明显敏感信息：地址、手机号、密码、银行卡号等
 
 输出JSON格式：
 {
@@ -360,61 +278,147 @@ fn should_extract_facts(messages: &[ChatMessage], last_extract_ts: u64) -> bool 
 {messages}
 ```
 
+### 4.4 敏感信息检测
+
+```rust
+// 敏感谓词屏蔽列表
+const SENSITIVE_PREDICATES: &[&str] = &[
+    "住在", "地址", "密码", "银行卡", "账号", "手机号", "电话",
+];
+
+// 敏感信息正则
+const SENSITIVE_PATTERNS: &[Regex] = &[
+    Regex::new(r"\d{11}").unwrap(),  // 手机号
+    Regex::new(r"\d{16,}").unwrap(), // 银行卡号
+];
+
+fn is_sensitive_fact(predicate: &str, object: &str) -> bool {
+    // 检查谓词
+    for sp in SENSITIVE_PREDICATES {
+        if predicate.contains(sp) {
+            return true;
+        }
+    }
+    // 检查对象内容
+    for pattern in SENSITIVE_PATTERNS {
+        if pattern.is_match(object) {
+            return true;
+        }
+    }
+    false
+}
+```
+
+### 4.5 冲突处理（superseded 模式）
+
+```
+场景：用户说"我喜欢火锅"，后来又说"我讨厌火锅"
+
+处理流程：
+1. 新事实 B (predicate=讨厌, object=火锅) 进入 merge
+2. 发现已有事实 A (predicate=喜欢, object=火锅)
+3. 两者 subject+predicate 相同，object 不同 → 冲突
+4. 操作：
+   - A.status = Superseded
+   - A.superseded_by = B.id
+   - B.status = Active
+   - B.replaces = A.id
+5. 检索时只返回 B（A 被隐藏但保留可追溯）
+
+场景：用户重复说"我喜欢火锅"（完全相同）
+→ 只更新 A 的 updated_at 和 access_count，不创建新事实
+```
+
+### 4.6 检索策略（混合模式）
+
+```rust
+fn get_relevant_facts(context: &str, limit: usize) -> Vec<UserFact> {
+    // 策略1：时间衰减 + 访问频率
+    let candidates: Vec<UserFact> = facts
+        .into_iter()
+        .filter(|f| f.status == FactStatus::Active)
+        .filter(|f| f.created_at > now() - 7 * 24 * 3600)  // 7天内
+        .sorted_by_key(|f| -(f.access_count as i64))       // 访问次数降序
+        .take(20)                                           // 候选20条
+        .collect();
+    
+    // 策略2：关键词匹配（轻量，无需LLM）
+    let keywords = extract_keywords(context);  // 从当前对话提取
+    let keyword_matched: Vec<UserFact> = candidates
+        .iter()
+        .filter(|f| {
+            f.object.contains_any(keywords) || 
+            f.predicate.contains_any(keywords) ||
+            f.tags.contains_any(keywords)
+        })
+        .take(5)
+        .cloned()
+        .collect();
+    
+    if keyword_matched.len() >= 3 {
+        return keyword_matched;  // 够用就返回
+    }
+    
+    // 策略3：轻量LLM筛选（仅在候选不足时）
+    // 调用 gpt-3.5-turbo 从20条候选中选最相关3-5条
+    return lightweight_llm_filter(candidates, context, limit);
+}
+```
+
 ---
 
 ## 五、风险评估
 
 | 风险 | 等级 | 缓解措施 |
 |------|------|----------|
-| LLM 事实提取不准确 | 🟡 中 | 置信度字段 + 用户可编辑/删除 |
-| 存储膨胀 | 🟢 低 | 90天冷数据降级 + 去重机制 |
-| 隐私问题 | 🟡 中 | 敏感信息检测 + 本地存储 + 用户可控清除 |
-| 检索质量 | 🟡 中 | LLM 辅助语义匹配 + 标签筛选 |
-| 并发写入冲突 | 🟢 低 | 追加写入 pending + Mutex 保护合并 |
-| 错误事实影响对话 | 🟡 中 | 高置信度(>0.8)才注入 + 用户确认 |
+| LLM 事实提取不准确 | 🟡 中 | 置信度字段 + 低置信度 pending 确认机制 |
+| 存储膨胀 | 🟢 低 | 90天冷数据降级 + 去重机制 + superseded 状态 |
+| 隐私问题 | 🟡 中 | 敏感谓词屏蔽 + 正则检测 + 本地存储 + 用户可控清除 |
+| 检索质量 | 🟡 中 | 混合检索策略（时间衰减+关键词+LLM辅助） |
+| 并发写入冲突 | 🟢 低 | tokio::sync::Mutex 保护 + 追加写入 pending |
+| 错误事实影响对话 | 🟡 中 | 高置信度(>0.7)才注入 + pending 确认机制 |
+| 事实冲突 | 🟡 中 | superseded 模式保留历史可追溯 |
 
 ---
 
 ## 六、工作量估算
 
-### 第一阶段：核心存储（预计 8 小时）
+### Phase 1.1：核心基础设施（预计 4 小时）
 
-**产出：** `facts.rs` 模块 + 基本 CRUD
-
-| 模块 | 工时 | 内容 |
-|------|------|------|
-| 后端 facts.rs | 4h | CRUD + 并发保护 + 去重 |
-| 前端展示（事实列表） | 3h | 查看/编辑/删除事实 |
-| 集成测试 | 1h | cargo test 验证 |
-
-### 第二阶段：自动提取（预计 6 小时）
-
-**产出：** 对话后自动触发事实提取
+**产出：** facts.rs 完善 + 并发安全 + 敏感检测
 
 | 模块 | 工时 | 内容 |
 |------|------|------|
-| LLM 提取调用 | 3h | Prompt + API 调用 + 解析 |
-| 触发条件控制 | 2h | Throttle + 条件检查 |
-| 测试 | 1h | 验证提取质量 |
+| tokio::sync::Mutex | 1h | 替换 std::sync::Mutex + 定时合并 |
+| 敏感信息检测 | 1h | 谓词屏蔽 + 正则过滤 |
+| 定时合并任务 | 2h | 每20条或每10分钟触发一次 |
 
-### 第三阶段：智能检索（预计 4 小时）
+### Phase 1.2：数据质量保障（预计 6 小时）
 
-**产出：** 对话时自然注入相关事实
+**产出：** pending 队列 + 冲突处理
 
 | 模块 | 工时 | 内容 |
 |------|------|------|
-| 事实注入 system prompt | 2h | 相关事实筛选 + 格式化 |
-| 冷数据降级 | 1h | 90天归档机制 |
-| 测试 | 1h | 验证对话自然度 |
+| 待确认事实队列 | 3h | confidence < 0.7 进入 pending，卡片展示 |
+| 冲突处理机制 | 3h | status字段 + superseded_by + replaces |
+
+### Phase 2：智能检索（预计 6 小时）
+
+**产出：** 检索注入 + UserProfile 同步
+
+| 模块 | 工时 | 内容 |
+|------|------|------|
+| 混合检索策略 | 3h | 时间衰减+关键词+LLM筛选 |
+| UserProfile同步 | 3h | 合并时同步 predicate 属于预设类型 |
 
 ### 总计
 
 | 阶段 | 工时 | 产出 |
 |------|------|------|
-| 第一阶段 | 8h | 核心存储 |
-| 第二阶段 | 6h | 自动提取 |
-| 第三阶段 | 4h | 智能检索 |
-| **总计** | **18小时（~3人天）** | 完整功能 |
+| Phase 1.1 | 4h | 核心基础设施 |
+| Phase 1.2 | 6h | 数据质量保障 |
+| Phase 2 | 6h | 智能检索 |
+| **总计** | **16小时（~3人天）** | 完整功能 |
 
 ---
 
@@ -431,28 +435,34 @@ fn should_extract_facts(messages: &[ChatMessage], last_extract_ts: u64) -> bool 
 
 ### 分阶段目标
 
-**Phase 1（MVP）：**
-- 手动添加事实（用户可在 UI 中输入）
-- 查看/编辑/删除已有事实
-- 验证存储结构合理
+**Phase 1.1（MVP）：**
+- tokio::sync::Mutex 替代 std::sync::Mutex
+- 定时合并（每20条或每10分钟）
+- 敏感信息检测过滤
 
-**Phase 2（自动提取）：**
-- 对话结束后自动提取事实
-- 触发条件：≥3轮 + 消息长度 + 冷却时间
+**Phase 1.2：**
+- pending 待确认队列（confidence < 0.7）
+- 冲突处理（superseded 模式）
+- 前端展示待确认卡片
 
-**Phase 3（智能注入）：**
-- 对话时注入相关事实
-- 桌宠能自然提起用户说过的事
-
----
-
-## 八、待皇上批准事项
-
-1. **采用方案A**（JSON 结构化存储）
-2. **Phase 1 先实施**，验证后再继续
-3. **事实数据存储位置**：`data/memory/facts/`
-4. **触发条件**：≥3轮 + 消息≥50字符 + 冷却30分钟
+**Phase 2：**
+- 混合检索策略
+- UserProfile 同步
+- 冷数据降级
 
 ---
 
-*本报告由中书省起草，待门下省审议、皇上批准后方可实施代码修改。*
+## 八、已批准实施内容
+
+| 编号 | 建议内容 | 状态 |
+|------|----------|------|
+| 建议1 | 低置信度事实分流（pending队列）+ 敏感谓词屏蔽 | ✅ 已采纳 |
+| 建议2 | 事实冲突处理（superseded模式） | ✅ 已采纳 |
+| 建议3 | 检索策略细化（混合模式） | ✅ 已采纳 |
+| 建议4 | tokio::sync::Mutex + 定时合并 | ✅ 已采纳 |
+| 建议5 | UserProfile 同步 | ✅ 已采纳 |
+| 建议6 | 敏感信息检测 | ✅ 已采纳 |
+
+---
+
+*本报告由中书省起草，已整合6项改进建议。*
