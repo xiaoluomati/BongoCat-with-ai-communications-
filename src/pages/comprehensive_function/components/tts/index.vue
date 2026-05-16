@@ -126,6 +126,7 @@ async function saveConfig() {
       base_url: baseUrl.value,
       default_voice_id: defaultVoiceId.value,
       volume: volume.value,
+      speed: 1.0,  // Note: speed not in UI, using default
       voices: voices.value,
       stream_enabled: streamEnabled.value,
       stream_trigger_threshold: streamTriggerThreshold.value,
