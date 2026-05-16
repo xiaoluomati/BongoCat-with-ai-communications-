@@ -15,12 +15,35 @@ pub struct AppConfig {
     pub chat: ChatConfig,
 }
 
+impl Default for AppConfig {
+    fn default() -> Self {
+        Self {
+            llm: LLMConfigData::default(),
+            tts: TTSConfig::default(),
+            memory: MemoryConfig::default(),
+            characters: CharactersConfig::default(),
+            chat: ChatConfig::default(),
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ChatConfig {
     pub enabled: bool,
     pub max_messages: u32,
     pub window_width: u32,
     pub window_height: u32,
+}
+
+impl Default for ChatConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            max_messages: 100,
+            window_width: 500,
+            window_height: 700,
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -33,6 +56,19 @@ pub struct LLMConfigData {
     pub stream: bool,
 }
 
+impl Default for LLMConfigData {
+    fn default() -> Self {
+        Self {
+            provider: "deepseek".to_string(),
+            deepseek: ProviderConfig::default(),
+            minimax: MinimaxConfig::default(),
+            temperature: 0.8,
+            max_tokens: 500,
+            stream: true,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ProviderConfig {
     pub api_key: String,
@@ -40,10 +76,29 @@ pub struct ProviderConfig {
     pub model: String,
 }
 
+impl Default for ProviderConfig {
+    fn default() -> Self {
+        Self {
+            api_key: "".to_string(),
+            base_url: "https://api.deepseek.com".to_string(),
+            model: "deepseek-v4-flash".to_string(),
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MinimaxConfig {
     pub api_key: String,
     pub model: String,
+}
+
+impl Default for MinimaxConfig {
+    fn default() -> Self {
+        Self {
+            api_key: "".to_string(),
+            model: "MiniMax-M2.7".to_string(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -132,9 +187,29 @@ pub struct MemoryConfig {
     pub profile_update_interval: u32,
 }
 
+impl Default for MemoryConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            retention_days: 30,
+            context_weeks: 2,
+            auto_summary: true,
+            profile_update_interval: 50,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CharactersConfig {
     pub current: String,
+}
+
+impl Default for CharactersConfig {
+    fn default() -> Self {
+        Self {
+            current: "cat".to_string(),
+        }
+    }
 }
 
 fn get_data_dir() -> PathBuf {
