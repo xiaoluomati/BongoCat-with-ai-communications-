@@ -7,9 +7,14 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use chrono::Local;
 
-fn get_data_dir() -> PathBuf {
-    PathBuf::from("data")
+fn get_app_data_dir() -> PathBuf {
+    dirs::data_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("com.ayangweb.BongoCat")
+        .join("data")
 }
+
+fn get_data_dir() -> PathBuf { get_app_data_dir() }
 
 fn get_profile_dir() -> PathBuf {
     get_data_dir().join("profile")

@@ -213,13 +213,13 @@ impl Default for CharactersConfig {
 }
 
 fn get_app_data_dir() -> PathBuf {
-    // Use system data directory instead of project directory
-    // Windows: %APPDATA%/BongoCat/data/config.json
+    // Use system data directory - Tauri default app data dir
+    // Windows: %APPDATA%/com.ayangweb.BongoCat/data/config.json
     // macOS: ~/Library/Application Support/com.ayangweb.BongoCat/data
-    // Linux: ~/.local/share/BongoCat/data
+    // Linux: ~/.local/share/com.ayangweb.BongoCat/data
     dirs::data_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join("BongoCat")
+        .join("com.ayangweb.BongoCat")
         .join("data")
 }
 
