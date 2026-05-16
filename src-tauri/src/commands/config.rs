@@ -233,16 +233,29 @@ fn load_config_sync() -> Result<AppConfig, String> {
     let config_path = get_config_path();
     
     if !config_path.exists() {
+        // Try to load from bundled resource config as fallback
         let resource_config = PathBuf::from("data/config.json");
         if resource_config.exists() {
             let content = fs::read_to_string(&resource_config).map_err(|e| e.to_string())?;
-            return serde_json::from_str(&content).map_err(|e| e.to_string());
+            // Only use bundled config if it deserializes successfully
+            if let Ok(config) = serde_json::from_str::<AppConfig>(&content) {
+                return Ok(config);
+            }
+            // Bundled config is outdated/invalid, use default
+            // fall through to default below
         }
-        return Err("Config file not found".to_string());
+        // No valid config found, return default
+        return Ok(AppConfig::default());
     }
     
     let content = fs::read_to_string(&config_path).map_err(|e| e.to_string())?;
-    serde_json::from_str(&content).map_err(|e| e.to_string())
+    match serde_json::from_str::<AppConfig>(&content) {
+        Ok(config) => Ok(config),
+        Err(_) => {
+            // Config file exists but invalid/corrupted, use default
+            Ok(AppConfig::default())
+        }
+    }
 }
 
 #[tauri::command]
