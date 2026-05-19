@@ -15,7 +15,19 @@ pub struct AppConfig {
     pub chat: ChatConfig,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+impl Default for AppConfig {
+    fn default() -> Self {
+        Self {
+            llm: LLMConfigData::default(),
+            tts: TTSConfig::default(),
+            memory: MemoryConfig::default(),
+            characters: CharactersConfig::default(),
+            chat: ChatConfig::default(),
+        }
+    }
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct ChatConfig {
     pub enabled: bool,
     pub max_messages: u32,
@@ -23,7 +35,7 @@ pub struct ChatConfig {
     pub window_height: u32,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct LLMConfigData {
     pub provider: String,
     pub deepseek: ProviderConfig,
@@ -33,14 +45,14 @@ pub struct LLMConfigData {
     pub stream: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct ProviderConfig {
     pub api_key: String,
     pub base_url: String,
     pub model: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct MinimaxConfig {
     pub api_key: String,
     pub model: String,
@@ -124,7 +136,7 @@ impl Default for TTSConfig {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct MemoryConfig {
     pub enabled: bool,
     pub retention_days: u32,
@@ -133,7 +145,7 @@ pub struct MemoryConfig {
     pub profile_update_interval: u32,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct CharactersConfig {
     pub current: String,
 }
@@ -155,7 +167,8 @@ fn load_config_sync() -> Result<AppConfig, String> {
             let content = fs::read_to_string(&resource_config).map_err(|e| e.to_string())?;
             return serde_json::from_str(&content).map_err(|e| e.to_string());
         }
-        return Err("Config file not found".to_string());
+        // No config file found — return default config
+        return Ok(AppConfig::default());
     }
     
     let content = fs::read_to_string(&config_path).map_err(|e| e.to_string())?;
