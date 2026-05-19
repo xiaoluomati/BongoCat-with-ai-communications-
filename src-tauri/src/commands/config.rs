@@ -70,7 +70,8 @@ impl Default for VoiceConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TTSConfig {
     pub enabled: bool,
-    pub base_url: String,
+    #[serde(default)]
+    pub base_url: Option<String>,
     pub default_voice_id: String,
     pub volume: i32,
     pub speed: f32,
@@ -107,7 +108,7 @@ impl Default for TTSConfig {
     fn default() -> Self {
         Self {
             enabled: false,
-            base_url: "http://localhost:9880".to_string(),
+            base_url: Some("http://localhost:9880".to_string()),
             default_voice_id: "suyao".to_string(),
             volume: 80,
             speed: 1.0,

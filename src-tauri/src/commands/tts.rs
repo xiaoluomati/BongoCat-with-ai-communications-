@@ -389,7 +389,7 @@ pub async fn tts_speak(
         &emo_method,
         speed,
         tts_config.emo_weight,
-        &tts_config.base_url,
+        tts_config.base_url.as_deref().unwrap_or("http://localhost:9880"),
         &msg_id,
         seq,
     ).await
@@ -549,7 +549,7 @@ pub async fn tts_speak_with_emotion(
         &emo_method,
         speed,
         tts_config.emo_weight,
-        &tts_config.base_url,
+        tts_config.base_url.as_deref().unwrap_or("http://localhost:9880"),
         &msg_id,
         seq,
     ).await
