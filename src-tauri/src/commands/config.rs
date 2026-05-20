@@ -84,7 +84,6 @@ pub struct TTSConfig {
     pub enabled: bool,
     #[serde(default)]
     pub base_url: Option<String>,
-    #[serde(default = "default_voice_id")]
     pub default_voice_id: String,
     pub volume: i32,
     pub speed: f32,
@@ -110,10 +109,6 @@ pub struct TTSConfig {
 
 fn default_emo_weight() -> f32 {
     0.8
-}
-
-fn default_voice_id() -> String {
-    "suyao".to_string()
 }
 
 fn default_trigger_threshold() -> u32 { 20 }
