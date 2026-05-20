@@ -45,11 +45,21 @@ pub struct LLMConfigData {
     pub stream: bool,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ProviderConfig {
     pub api_key: String,
     pub base_url: String,
     pub model: String,
+}
+
+impl Default for ProviderConfig {
+    fn default() -> Self {
+        Self {
+            api_key: String::new(),
+            base_url: "https://api.deepseek.com/v1".to_string(),
+            model: "deepseek-chat".to_string(),
+        }
+    }
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
