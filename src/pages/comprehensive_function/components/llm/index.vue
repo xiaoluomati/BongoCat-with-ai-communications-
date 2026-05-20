@@ -115,6 +115,7 @@ const defaultBaseUrls: Record<string, string> = {
 function getDefaultBaseUrl(): string {
   if (provider.value === 'llama.cpp') return 'http://localhost'
   return defaultBaseUrls[provider.value] || ''
+}
 
 // 获取默认端口
 function getDefaultPort(): number {
