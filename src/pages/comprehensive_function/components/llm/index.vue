@@ -83,14 +83,14 @@ async function loadProviderConfig() {
       apiKey.value = providerConfig.api_key || ''
       model.value = providerConfig.model || defaultModels[provider.value]
       // 解析 base_url 为 host 和 port
-      const fullUrl = providerConfig.base_url || getDefaultBaseUrl() + ':' + getDefaultPort()
-      const match = fullUrl.match(/^(https?:\/\/[^:]+)(:(\d+))?$/)
+      const fullUrl = providerConfig.base_url || getDefaultBaseUrl() + (getDefaultPort() ? ':' + getDefaultPort() : '')
+      const match = fullUrl.match(/^(https?:\/\/[^:/]+)(:(\d+))?(\/.*)?$/)
       if (match) {
         baseHost.value = match[1]
-        basePort.value = match[3] ? parseInt(match[3]) : getDefaultPort()
+        basePort.value = match[3] ? parseInt(match[3]) : (getDefaultPort() || 0)
       } else {
         baseHost.value = getDefaultBaseUrl()
-        basePort.value = getDefaultPort()
+        basePort.value = getDefaultPort() || 0
       }
     } else {
       // 使用默认值
@@ -139,8 +139,12 @@ async function saveConfig() {
     config.llm[provider.value] = config.llm[provider.value] || {}
     config.llm[provider.value].api_key = apiKey.value
     config.llm[provider.value].model = model.value
-    // 拼接 host 和 port 为完整的 base_url
-    config.llm[provider.value].base_url = `${baseHost.value}:${basePort.value}`
+    // 只对需要端口的本地服务（如llama.cpp）拼接端口
+    if (provider.value === 'llama.cpp') {
+      config.llm[provider.value].base_url = `${baseHost.value}:${basePort.value}`
+    } else {
+      config.llm[provider.value].base_url = baseHost.value
+    }
     
     await invoke('save_config', { config })
     message.success('配置已保存')
