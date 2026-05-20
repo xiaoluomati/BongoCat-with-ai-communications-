@@ -56,7 +56,7 @@ impl Default for ProviderConfig {
     fn default() -> Self {
         Self {
             api_key: String::new(),
-            base_url: "https://api.deepseek.com/v1".to_string(),
+            base_url: "https://api.deepseek.com".to_string(),
             model: "deepseek-chat".to_string(),
         }
     }
