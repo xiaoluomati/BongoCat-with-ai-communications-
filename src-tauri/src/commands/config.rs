@@ -151,7 +151,9 @@ pub struct CharactersConfig {
 }
 
 fn get_data_dir() -> PathBuf {
-    PathBuf::from("data")
+    dirs::data_local_dir()
+        .unwrap_or_else(|| PathBuf::from("data"))
+        .join("com.ayangweb.BongoCat")
 }
 
 fn get_config_path() -> PathBuf {
@@ -162,12 +164,7 @@ fn load_config_sync() -> Result<AppConfig, String> {
     let config_path = get_config_path();
     
     if !config_path.exists() {
-        let resource_config = PathBuf::from("data/config.json");
-        if resource_config.exists() {
-            let content = fs::read_to_string(&resource_config).map_err(|e| e.to_string())?;
-            return serde_json::from_str(&content).map_err(|e| e.to_string());
-        }
-        // No config file found — return default config
+        // No config in user data dir — return default
         return Ok(AppConfig::default());
     }
     
