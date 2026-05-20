@@ -150,14 +150,14 @@ pub struct CharactersConfig {
     pub current: String,
 }
 
-fn get_data_dir() -> PathBuf {
+pub fn get_app_data_dir() -> PathBuf {
     dirs::data_local_dir()
         .unwrap_or_else(|| PathBuf::from("data"))
         .join("com.ayangweb.BongoCat")
 }
 
 fn get_config_path() -> PathBuf {
-    get_data_dir().join("config.json")
+    get_app_data_dir().join("config.json")
 }
 
 fn load_config_sync() -> Result<AppConfig, String> {
@@ -247,7 +247,7 @@ pub struct Character {
 }
 
 fn get_characters_dir() -> PathBuf {
-    PathBuf::from("data/characters")
+    get_app_data_dir().join("characters")
 }
 
 fn get_default_characters_dir() -> PathBuf {

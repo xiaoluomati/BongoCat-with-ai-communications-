@@ -1,6 +1,6 @@
 //! Chat Commands
 
-use crate::commands::config;
+use crate::commands::config::{self, get_app_data_dir};
 use crate::llm::{ChatMessage, ChatResponse, LLMManager};
 use chrono::Local;
 use serde::{Deserialize, Serialize};
@@ -252,9 +252,7 @@ fn get_current_character() -> Result<config::Character, String> {
 
 /// Load user profile
 fn load_user_profile() -> Result<HashMap<String, String>, String> {
-    let profile_path = dirs::data_local_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("data")
+    let profile_path = get_app_data_dir()
         .join("profile")
         .join("user_profile.json");
     
@@ -300,9 +298,7 @@ fn load_user_profile() -> Result<HashMap<String, String>, String> {
 
 /// Load long term memory (weekly/monthly summaries)
 fn load_long_term_memory() -> Result<String, String> {
-    let memory_dir = dirs::data_local_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("data")
+    let memory_dir = get_app_data_dir()
         .join("memory");
     
     let mut memory = String::new();
@@ -370,9 +366,7 @@ fn load_long_term_memory() -> Result<String, String> {
 fn load_short_term_memory() -> Result<Vec<ChatMessage>, String> {
     let today = Local::now().format("%Y-%m-%d").to_string();
     
-    let chat_path = dirs::data_local_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("data")
+    let chat_path = get_app_data_dir()
         .join("memory")
         .join("chat")
         .join(format!("{}.json", today));

@@ -1,5 +1,6 @@
 //! Character Enhancement - User Profile & Extended Commands
 
+use crate::commands::config::get_app_data_dir;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -7,9 +8,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use chrono::Local;
 
-fn get_data_dir() -> PathBuf {
-    PathBuf::from("data")
-}
+fn get_data_dir() -> PathBuf { get_app_data_dir() }
 
 fn get_profile_dir() -> PathBuf {
     get_data_dir().join("profile")

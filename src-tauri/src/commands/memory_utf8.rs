@@ -1,10 +1,11 @@
 // Memory Management Commands
+use crate::commands::config::get_app_data_dir;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 use chrono::Local;
 
-fn get_data_dir() -> PathBuf { PathBuf::from("data") }
+fn get_data_dir() -> PathBuf { get_app_data_dir() }
 fn get_memory_dir() -> PathBuf { get_data_dir().join("memory") }
 fn get_chat_dir() -> PathBuf { get_memory_dir().join("chat") }
 fn get_weekly_dir() -> PathBuf { get_memory_dir().join("weekly") }

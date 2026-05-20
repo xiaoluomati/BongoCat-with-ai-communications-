@@ -1,19 +1,9 @@
 // Memory Management Commands
+use crate::commands::config::get_app_data_dir;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 use chrono::Local;
-
-fn get_app_data_dir() -> PathBuf {
-    // Use system data directory instead of project directory to avoid Tauri dev watcher issues
-    // Windows: %APPDATA%/BongoCat/data
-    // macOS: ~/Library/Application Support/com.ayangweb.BongoCat/data
-    // Linux: ~/.local/share/BongoCat/data
-    dirs::data_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("BongoCat")
-        .join("data")
-}
 
 fn get_data_dir() -> PathBuf { get_app_data_dir() }
 fn get_memory_dir() -> PathBuf { get_data_dir().join("memory") }
