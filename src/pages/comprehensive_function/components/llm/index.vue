@@ -104,11 +104,17 @@ async function loadProviderConfig() {
   }
 }
 
+// 默认 base_url（云服务厂商）
+const defaultBaseUrls: Record<string, string> = {
+  deepseek: 'https://api.deepseek.com',
+  minimax: 'https://api.minimax.chat',
+  openai: 'https://api.openai.com',
+}
+
 // 获取默认 base_url
 function getDefaultBaseUrl(): string {
   if (provider.value === 'llama.cpp') return 'http://localhost'
-  return ''
-}
+  return defaultBaseUrls[provider.value] || ''
 
 // 获取默认端口
 function getDefaultPort(): number {
@@ -143,7 +149,8 @@ async function saveConfig() {
     if (provider.value === 'llama.cpp') {
       config.llm[provider.value].base_url = `${baseHost.value}:${basePort.value}`
     } else {
-      config.llm[provider.value].base_url = baseHost.value
+      // 云服务 base_url 为空时用默认值兜底
+      config.llm[provider.value].base_url = baseHost.value || defaultBaseUrls[provider.value] || ''
     }
     
     await invoke('save_config', { config })
