@@ -151,7 +151,7 @@ pub struct CharactersConfig {
 }
 
 pub fn get_app_data_dir() -> PathBuf {
-    dirs::data_local_dir()
+    dirs::data_dir()
         .unwrap_or_else(|| PathBuf::from("data"))
         .join("com.ayangweb.BongoCat")
 }
