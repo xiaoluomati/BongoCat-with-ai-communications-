@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { DeleteOutlined, EditOutlined, PlusOutlined, SwapOutlined } from '@ant-design/icons-vue'
+import { DeleteOutlined, EditOutlined, PlusOutlined, SwapOutlined, UploadOutlined, PictureOutlined } from '@ant-design/icons-vue'
 import { Button, Card, Input, Modal, message, Select, Spin, Switch } from 'ant-design-vue'
-import { invoke } from '@tauri-apps/api/core'
+import { invoke, convertFileSrc } from '@tauri-apps/api/core'
+import { open } from '@tauri-apps/plugin-dialog'
 import { ref, onMounted, computed } from 'vue'
 
 import ProList from '@/components/pro-list/index.vue'
@@ -84,6 +85,20 @@ function openCreateModal() {
   editingCharacter.value = { ...defaultCharacter }
   isEditing.value = false
   isModalVisible.value = true
+}
+
+async function openAvatarPicker() {
+  try {
+    const file = await open({
+      multiple: false,
+      filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'] }],
+    })
+    if (file && typeof file === 'string') {
+      editingCharacter.value!.avatar = convertFileSrc(file)
+    }
+  } catch (err) {
+    console.error('Failed to pick avatar:', err)
+  }
 }
 
 // Open edit modal
@@ -273,13 +288,17 @@ onMounted(() => {
 
       <!-- Avatar -->
       <div>
-        <label class="block text-sm font-medium mb-1">头像 URL</label>
-        <Input
-          v-model:value="editingCharacter.avatar"
-          placeholder="https://example.com/avatar.png"
-        />
-        <div v-if="editingCharacter.avatar" class="mt-2">
-          <img :src="editingCharacter.avatar" class="w-16 h-16 rounded-full object-cover" alt="预览">
+        <label class="block text-sm font-medium mb-1">头像</label>
+        <div class="flex items-center gap-4">
+          <div class="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden">
+            <img v-if="editingCharacter.avatar" :src="editingCharacter.avatar" class="w-full h-full object-cover" alt="预览">
+            <PictureOutlined v-else class="text-2xl text-gray-400" />
+          </div>
+          <Button @click="openAvatarPicker">
+            <template #icon><UploadOutlined /></template>
+            选择图片
+          </Button>
+          <Button v-if="editingCharacter.avatar" @click="editingCharacter.avatar = ''" size="small">清除</Button>
         </div>
       </div>
 
