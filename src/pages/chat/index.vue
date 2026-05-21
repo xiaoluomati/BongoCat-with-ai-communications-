@@ -581,6 +581,3 @@ function formatTime(timestamp: number): string {
   box-shadow: 0 5px 16px rgba(255, 154, 122, 0.45);
 }
 </style>
-6px rgba(255, 154, 122, 0.45);
-}
-</style>
