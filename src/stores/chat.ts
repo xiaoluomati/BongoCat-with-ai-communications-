@@ -183,11 +183,10 @@ export const useChatStore = defineStore('chat', () => {
 
           // Final update - ensure pure text
           const msgIndex = messages.value.findIndex(m => m.id === streamingMessageId)
+          const finalContent = msgIndex !== -1
+            ? (emotionAuto ? extractPureText(response.content) : response.content)
+            : response.content
           if (msgIndex !== -1) {
-            // Use extracted pure text or response content
-            const finalContent = emotionAuto 
-              ? extractPureText(response.content)
-              : response.content
             messages.value[msgIndex].content = finalContent
             
             // Save TTS meta if we have audio files
