@@ -97,6 +97,12 @@ export const useChatStore = defineStore('chat', () => {
     }
     messages.value.push(userMessage)
 
+    // Scroll to bottom when user message is added
+    nextTick(() => {
+      const container = document.querySelector('.messages-container') as HTMLElement
+      if (container) container.scrollTop = container.scrollHeight
+    })
+
     // Save to memory
     await saveMessageToMemory(userMessage)
 
@@ -174,7 +180,9 @@ export const useChatStore = defineStore('chat', () => {
             // Scroll to bottom after each chunk update
             nextTick(() => {
               const container = document.querySelector('.messages-container') as HTMLElement
-              if (container) container.scrollTop = container.scrollHeight
+              if (container) {
+                container.scrollTop = container.scrollHeight
+              }
             })
             // No emotion parsing, use raw chunk
             pureTextContent += chunk
@@ -187,7 +195,9 @@ export const useChatStore = defineStore('chat', () => {
             // Scroll to bottom after each chunk update
             nextTick(() => {
               const container = document.querySelector('.messages-container') as HTMLElement
-              if (container) container.scrollTop = container.scrollHeight
+              if (container) {
+                container.scrollTop = container.scrollHeight
+              }
             })
           }
         })
@@ -268,6 +278,12 @@ export const useChatStore = defineStore('chat', () => {
           timestamp: Date.now(),
         }
         messages.value.push(assistantMessage)
+
+        // Scroll to bottom after assistant message
+        nextTick(() => {
+          const container = document.querySelector('.messages-container') as HTMLElement
+          if (container) container.scrollTop = container.scrollHeight
+        })
 
         // Save to memory
         await saveMessageToMemory(assistantMessage)
