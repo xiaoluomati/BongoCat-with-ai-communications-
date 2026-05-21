@@ -20,6 +20,7 @@ async function replayTTS(msg: ChatMessage) {
   }
 }
 const inputText = ref('')
+const chatInputRef = ref<any>(null)
 const messagesContainer = ref<HTMLElement | null>(null)
 const chatWindow = getCurrentWebviewWindow()
 const currentCharacter = ref('Bongo Cat')
@@ -168,6 +169,7 @@ async function handleSend() {
   
   const text = inputText.value.trim()
   inputText.value = ''
+  nextTick(() => chatInputRef.value?.focus())
   
   await chatStore.sendMessage(text)
   
@@ -285,6 +287,7 @@ function formatTime(timestamp: number): string {
     <!-- Input -->
     <div class="input-container">
       <Input
+        ref="chatInputRef"
         v-model:value="inputText"
         class="chat-input"
         placeholder="输入消息..."
@@ -576,5 +579,8 @@ function formatTime(timestamp: number): string {
 .send-btn:hover {
   transform: translateY(-1px);
   box-shadow: 0 5px 16px rgba(255, 154, 122, 0.45);
+}
+</style>
+6px rgba(255, 154, 122, 0.45);
 }
 </style>
