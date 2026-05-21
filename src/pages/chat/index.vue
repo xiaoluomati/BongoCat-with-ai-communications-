@@ -169,14 +169,15 @@ async function handleSend() {
   
   const text = inputText.value.trim()
   
-  // Clear input - set ref to empty string first, then blur the actual DOM input
+  // Clear input using component ref - set value directly
   inputText.value = ''
-  // Force clear the actual DOM input element that ant-design-vue creates
-  const domInput = document.querySelector('.chat-container .ant-input') as HTMLInputElement
-  if (domInput) {
-    domInput.value = ''
-    domInput.focus()
-  }
+  nextTick(() => {
+    const input = (inputRef.value as any)?.$el?.querySelector('input') as HTMLInputElement
+    if (input) {
+      input.value = ''
+      input.focus()
+    }
+  })
   
   await chatStore.sendMessage(text)
   

@@ -151,41 +151,39 @@ export const useChatStore = defineStore('chat', () => {
         console.log('[chat] setting up stream listener');
         // Listen for chunks
         unlistenChunkRef = await listen<[string, string]>('chat_stream_chunk', (event) => {
-          console.log('[chat] stream chunk received:', event.payload[1]);
           const [, chunk] = event.payload
+          console.log('[chat] stream chunk received, len=', chunk.length, 'chunk=', JSON.stringify(chunk));
           streamingContent += chunk
           chunkCount++
           
-          // Parse emotion from chunk
           if (emotionAuto) {
             const { context, result } = parseEmotionChunk(emotionParser, chunk)
             emotionParser = context
             
-            // Update emotion if parsed
             if (result.emotion) {
               ttsStore.setEmotion(result.emotion)
             }
             
-            // Append only pure text (no emotion tags) to message
+            // TTS: use result.text (emotion-stripped) if available, else raw chunk
+            ttsStore.speakStream(result.text || chunk)
+            
+            // Display: accumulate only result.text (emotion stripped), fall back to raw chunk
             if (result.text) {
               pureTextContent += result.text
-              // Update the message in place with pure text
-              const msgIndex = messages.value.findIndex(m => m.id === streamingMessageId)
-              if (msgIndex !== -1) {
-                messages.value[msgIndex].content = pureTextContent
-              }
+            } else {
+              pureTextContent += chunk
             }
-            
-            // Trigger TTS streaming
-            ttsStore.speakStream(result.text || chunk)
           } else {
-            // No emotion parsing, use raw chunk
             pureTextContent += chunk
-            const msgIndex = messages.value.findIndex(m => m.id === streamingMessageId)
-            if (msgIndex !== -1) {
-              messages.value[msgIndex].content = pureTextContent
-            }
             ttsStore.speakStream(chunk)
+          }
+          
+          // Update message display with accumulated text
+          const msgIndex = messages.value.findIndex(m => m.id === streamingMessageId)
+          console.log('[chat] msgIndex:', msgIndex, 'pureTextContent len:', pureTextContent.length);
+          if (msgIndex !== -1) {
+            messages.value[msgIndex].content = pureTextContent
+            console.log('[chat] message content updated, msg len:', messages.value[msgIndex].content.length);
           }
           
           // Scroll every 15 chunks
