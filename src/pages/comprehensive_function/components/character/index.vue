@@ -195,8 +195,9 @@ onMounted(() => {
       <div class="flex items-center justify-between w-full">
         <div class="flex items-center gap-3">
           <!-- Avatar -->
-          <div class="w-12 h-12 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white text-lg font-bold">
-            {{ char.name.charAt(0).toUpperCase() }}
+          <div class="w-12 h-12 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white text-lg font-bold overflow-hidden">
+            <img v-if="char.avatar" :src="char.avatar" class="w-full h-full object-cover" alt="avatar">
+            <span v-else>{{ char.name.charAt(0).toUpperCase() }}</span>
           </div>
           
           <!-- Info -->
@@ -267,6 +268,18 @@ onMounted(() => {
             v-model:value="editingCharacter.name" 
             placeholder="显示名称"
           />
+        </div>
+      </div>
+
+      <!-- Avatar -->
+      <div>
+        <label class="block text-sm font-medium mb-1">头像 URL</label>
+        <Input
+          v-model:value="editingCharacter.avatar"
+          placeholder="https://example.com/avatar.png"
+        />
+        <div v-if="editingCharacter.avatar" class="mt-2">
+          <img :src="editingCharacter.avatar" class="w-16 h-16 rounded-full object-cover" alt="预览">
         </div>
       </div>
 
