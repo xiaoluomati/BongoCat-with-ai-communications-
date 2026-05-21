@@ -6,6 +6,7 @@ import { ref, onMounted, computed } from 'vue'
 import ProList from '@/components/pro-list/index.vue'
 import ProListItem from '@/components/pro-list-item/index.vue'
 import { useTTSStore } from '@/stores/tts'
+import { useConfigStore } from '@/stores/config'
 
 // TTS Configuration
 interface VoiceConfig {
@@ -136,6 +137,16 @@ async function saveConfig() {
       emo_weight: emoWeight.value
     }
     await invoke('save_tts_config', { ttsConfig: config })
+    const configStore = useConfigStore()
+    await configStore.saveTTS({
+      enabled: enabled.value,
+      emotion_auto: emotionAuto.value,
+      stream_enabled: streamEnabled.value,
+      stream_trigger_threshold: streamTriggerThreshold.value,
+      stream_max_buffer: streamMaxBuffer.value,
+      stream_min_chunk: streamMinChunk.value,
+      voices: voices.value,
+    })
     // Don't show message here to avoid spam
   } catch (err) {
     console.error('Failed to save TTS config:', err)

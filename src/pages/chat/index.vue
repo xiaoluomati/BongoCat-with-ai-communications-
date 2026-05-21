@@ -7,10 +7,12 @@ import { onMounted, ref, nextTick, watch } from 'vue'
 
 import { useChatStore } from '@/stores/chat'
 import { useTTSStore } from '@/stores/tts'
+import { useConfigStore } from '@/stores/config'
 import type { ChatMessage } from '@/stores/chat'
 
 const chatStore = useChatStore()
 const ttsStore = useTTSStore()
+const configStore = useConfigStore()
 
 // Replay TTS for a message
 async function replayTTS(msg: ChatMessage) {
@@ -33,24 +35,21 @@ const hasMoreHistory = ref(true)
 
 // Load config and history on mount
 onMounted(async () => {
+  await configStore.init()
   await chatStore.loadConfig()
   await ttsStore.init()
   // 先加载今天的消息
   await chatStore.loadHistory()
   loadedDates.value = [getTodayString()]
-  
-  // Get current character name
-  try {
-    const config = await invoke<any>('load_config')
-    if (config.characters?.current) {
-      const char = await invoke<any>('load_character', { id: config.characters.current })
-      currentCharacter.value = char.name || 'Bongo Cat'
-      characterAvatar.value = char.avatar || ''
+
+  // Watch for character changes
+  watch(() => configStore.currentCharacter, (char) => {
+    if (char) {
+      currentCharacter.value = char.name
+      characterAvatar.value = char.avatar ? (char.avatar.startsWith('http') ? char.avatar : convertFileSrc(char.avatar)) : ''
     }
-  } catch (e) {
-    console.error('Failed to load character:', e)
-  }
-  
+  }, { immediate: true })
+
   // 滚动到底部
   scrollToBottom()
   

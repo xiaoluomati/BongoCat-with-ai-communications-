@@ -7,6 +7,7 @@ import { ref, onMounted, computed } from 'vue'
 
 import ProList from '@/components/pro-list/index.vue'
 import ProListItem from '@/components/pro-list-item/index.vue'
+import { useConfigStore } from '@/stores/config'
 
 // Types
 interface Character {
@@ -138,6 +139,8 @@ async function saveCharacter() {
   
   try {
     await invoke('save_character', { character: editingCharacter.value })
+    const configStore = useConfigStore()
+    await configStore.saveCharacter(editingCharacter.value!)
     message.success(isEditing.value ? '角色已更新' : '角色已创建')
     isModalVisible.value = false
     await loadCharacters()
@@ -173,7 +176,8 @@ async function deleteCharacter(id: string) {
 // Switch character
 async function switchCharacter(id: string) {
   try {
-    await invoke('switch_character', { id })
+    const configStore = useConfigStore()
+    await configStore.switchCharacter(id)
     currentCharacterId.value = id
     message.success('已切换到 ' + characters.value.find(c => c.id === id)?.name)
   } catch (err) {

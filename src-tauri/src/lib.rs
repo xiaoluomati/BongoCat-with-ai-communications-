@@ -20,6 +20,7 @@ use commands::{
     save_quarterly_summary, get_quarterly_summaries, save_yearly_summary, get_yearly_summaries,
     get_tts_config, save_tts_config, get_voice_config, save_voice, delete_voice,
     tts_speak, tts_speak_with_emotion, clear_tts_cache, get_tts_cache_info, get_index_tts_voices, get_index_tts_emos, save_tts_meta, get_tts_meta, get_tts_replay_paths,
+    emit_event,
 };
 use core::{
     device::start_device_listening,
@@ -155,7 +156,8 @@ pub fn run() {
             get_index_tts_emos,
             save_tts_meta,
             get_tts_meta,
-            get_tts_replay_paths
+            get_tts_replay_paths,
+            emit_event
         ])
         .manage(Arc::new(RwLock::new(ChatState::default())))
         .plugin(tauri_plugin_custom_window::init())

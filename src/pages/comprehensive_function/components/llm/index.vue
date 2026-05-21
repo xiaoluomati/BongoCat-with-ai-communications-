@@ -6,6 +6,7 @@ import { ref, onMounted, watch } from 'vue'
 
 import ProList from '@/components/pro-list/index.vue'
 import ProListItem from '@/components/pro-list-item/index.vue'
+import { useConfigStore } from '@/stores/config'
 
 // State
 const enabled = ref(false)
@@ -155,6 +156,18 @@ async function saveConfig() {
     }
     
     await invoke('save_config', { config })
+    const configStore = useConfigStore()
+    await configStore.saveLLM({
+      provider: provider.value,
+      [provider.value]: {
+        api_key: apiKey.value,
+        base_url: provider.value === 'llama.cpp' ? `${baseHost.value}:${basePort.value}` : (baseHost.value || defaultBaseUrls[provider.value] || ''),
+        model: model.value,
+      },
+      stream: stream.value,
+      temperature: temperature.value,
+      max_tokens: maxTokens.value,
+    })
     message.success('配置已保存')
   } catch (err) {
     console.error('Failed to save config:', err)

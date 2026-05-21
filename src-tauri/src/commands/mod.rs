@@ -40,3 +40,10 @@ pub use tts::{
     get_index_tts_voices, get_index_tts_emos,
     save_tts_meta, get_tts_meta, get_tts_replay_paths
 };
+
+/// Emit a global event to all windows
+#[tauri::command]
+pub async fn emit_event(app_handle: tauri::AppHandle, event: String, payload: serde_json::Value) -> Result<(), String> {
+    use tauri::Emitter;
+    app_handle.emit(&event, payload).map_err(|e: tauri::Error| e.to_string())
+}
