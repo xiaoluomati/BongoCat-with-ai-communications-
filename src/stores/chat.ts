@@ -170,7 +170,12 @@ export const useChatStore = defineStore('chat', () => {
             
             // Trigger TTS streaming
             ttsStore.speakStream(result.text || chunk)
-          } else {
+            
+            // Scroll to bottom after each chunk update
+            nextTick(() => {
+              const container = document.querySelector('.messages-container') as HTMLElement
+              if (container) container.scrollTop = container.scrollHeight
+            })
             // No emotion parsing, use raw chunk
             pureTextContent += chunk
             const msgIndex = messages.value.findIndex(m => m.id === streamingMessageId)
@@ -178,6 +183,12 @@ export const useChatStore = defineStore('chat', () => {
               messages.value[msgIndex].content = pureTextContent
             }
             ttsStore.speakStream(chunk)
+            
+            // Scroll to bottom after each chunk update
+            nextTick(() => {
+              const container = document.querySelector('.messages-container') as HTMLElement
+              if (container) container.scrollTop = container.scrollHeight
+            })
           }
         })
 

@@ -169,9 +169,13 @@ async function handleSend() {
   
   const text = inputText.value.trim()
   
-  // Clear input immediately before async call so user sees it right away
+  // Clear input immediately using DOM to ensure it works
   inputText.value = ''
-  chatInputRef.value?.focus()
+  const inputEl = document.querySelector('.chat-input input') as HTMLInputElement
+  if (inputEl) {
+    inputEl.value = ''
+    inputEl.focus()
+  }
   
   await chatStore.sendMessage(text)
   
