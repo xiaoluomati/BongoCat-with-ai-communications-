@@ -125,6 +125,7 @@ export const useChatStore = defineStore('chat', () => {
         const streamingMessageId = `msg_${Date.now() + 1}`
         let streamingContent = ''
         let pureTextContent = ''
+        let chunkCount = 0
         let _unlistenChunk: UnlistenFn | null = null
         let _unlistenEnd: UnlistenFn | null = null
         
@@ -153,6 +154,7 @@ export const useChatStore = defineStore('chat', () => {
           console.log('[chat] stream chunk received:', event.payload[1]);
           const [, chunk] = event.payload
           streamingContent += chunk
+          chunkCount++
           
           // Parse emotion from chunk
           if (emotionAuto) {
@@ -176,14 +178,7 @@ export const useChatStore = defineStore('chat', () => {
             
             // Trigger TTS streaming
             ttsStore.speakStream(result.text || chunk)
-            
-            // Scroll to bottom after each chunk update
-            nextTick(() => {
-              const container = document.querySelector('.messages-container') as HTMLElement
-              if (container) {
-                container.scrollTop = container.scrollHeight
-              }
-            })
+          } else {
             // No emotion parsing, use raw chunk
             pureTextContent += chunk
             const msgIndex = messages.value.findIndex(m => m.id === streamingMessageId)
@@ -191,14 +186,12 @@ export const useChatStore = defineStore('chat', () => {
               messages.value[msgIndex].content = pureTextContent
             }
             ttsStore.speakStream(chunk)
-            
-            // Scroll to bottom after each chunk update
-            nextTick(() => {
-              const container = document.querySelector('.messages-container') as HTMLElement
-              if (container) {
-                container.scrollTop = container.scrollHeight
-              }
-            })
+          }
+          
+          // Scroll every 15 chunks
+          if (chunkCount % 15 === 0) {
+            const container = document.querySelector('.messages-container') as HTMLElement
+            if (container) container.scrollTop = container.scrollHeight
           }
         })
 
