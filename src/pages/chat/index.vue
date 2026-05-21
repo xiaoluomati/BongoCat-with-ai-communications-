@@ -168,8 +168,10 @@ async function handleSend() {
   if (!inputText.value.trim() || chatStore.isLoading) return
   
   const text = inputText.value.trim()
+  
+  // Clear input immediately before async call so user sees it right away
   inputText.value = ''
-  nextTick(() => chatInputRef.value?.focus())
+  chatInputRef.value?.focus()
   
   await chatStore.sendMessage(text)
   

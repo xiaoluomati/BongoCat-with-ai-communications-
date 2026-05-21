@@ -34,6 +34,9 @@ export const useChatStore = defineStore('chat', () => {
   
   // Emotion parser state for streaming
   let emotionParser: ParserContext = createParserContext()
+  
+  // Stream listener reference for cleanup
+  let unlistenChunkRef: (() => void) | null = null
 
   // Load config
   async function loadConfig() {
@@ -132,9 +135,15 @@ export const useChatStore = defineStore('chat', () => {
         }
         messages.value.push(assistantMessage)
 
+        // Remove any existing listeners first to avoid duplicates
+        if (unlistenChunkRef) {
+          unlistenChunkRef()
+          unlistenChunkRef = null
+        }
+        
         console.log('[chat] setting up stream listener');
         // Listen for chunks
-        await listen<[string, string]>('chat_stream_chunk', (event) => {
+        unlistenChunkRef = await listen<[string, string]>('chat_stream_chunk', (event) => {
           console.log('[chat] stream chunk received:', event.payload[1]);
           const [, chunk] = event.payload
           streamingContent += chunk
@@ -213,7 +222,11 @@ export const useChatStore = defineStore('chat', () => {
 
           return finalContent || response.content
         } finally {
-          // Cleanup listeners would be handled by Tauri automatically
+          // Cleanup stream listener to prevent duplicate messages
+          if (unlistenChunkRef) {
+            unlistenChunkRef()
+            unlistenChunkRef = null
+          }
         }
       } else {
         // Non-streaming mode: get full response at once
