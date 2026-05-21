@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { CloseOutlined, SendOutlined, SettingOutlined } from '@ant-design/icons-vue'
-import { Button, Input, Spin } from 'ant-design-vue'
+import { Button, Spin } from 'ant-design-vue'
 import { getCurrentWebviewWindow, WebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { invoke } from '@tauri-apps/api/core'
 import { onMounted, ref, nextTick, watch } from 'vue'
@@ -169,15 +169,9 @@ async function handleSend() {
   
   const text = inputText.value.trim()
   
-  // Clear input using component ref - set value directly
+  // Clear input immediately - native input element, direct DOM manipulation
   inputText.value = ''
-  nextTick(() => {
-    const input = (inputRef.value as any)?.$el?.querySelector('input') as HTMLInputElement
-    if (input) {
-      input.value = ''
-      input.focus()
-    }
-  })
+  inputRef.value?.focus()
   
   await chatStore.sendMessage(text)
   
@@ -294,9 +288,9 @@ function formatTime(timestamp: number): string {
 
     <!-- Input -->
     <div class="input-container">
-      <Input
+      <input
         ref="inputRef"
-        v-model:value="inputText"
+        v-model="inputText"
         class="chat-input"
         placeholder="输入消息..."
         :disabled="chatStore.isLoading || !chatStore.enabled"
