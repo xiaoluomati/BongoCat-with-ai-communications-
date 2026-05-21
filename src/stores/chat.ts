@@ -132,8 +132,10 @@ export const useChatStore = defineStore('chat', () => {
         }
         messages.value.push(assistantMessage)
 
-        // Listen for chunks and trigger TTS streaming with emotion parsing
+        console.log('[chat] setting up stream listener');
+        // Listen for chunks
         await listen<[string, string]>('chat_stream_chunk', (event) => {
+          console.log('[chat] stream chunk received:', event.payload[1]);
           const [, chunk] = event.payload
           streamingContent += chunk
           

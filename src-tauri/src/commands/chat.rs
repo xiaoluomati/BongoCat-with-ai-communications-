@@ -69,6 +69,7 @@ pub async fn send_message(
     let response = if is_streaming {
         // Streaming mode: emit chunks via events
         let chat_id = uuid::Uuid::new_v4().to_string();
+    println!("[chat] stream start, chat_id={}", chat_id);
         
         // Emit start event
         let _ = app_handle.emit("chat_stream_start", (&chat_id,));
@@ -78,7 +79,8 @@ pub async fn send_message(
         
         let response = llm_manager
             .chat_stream(messages, move |chunk| {
-                let _ = app_handle_clone.emit("chat_stream_chunk", (&chat_id_clone, &chunk));
+                println!("[chat] chunk received: {} chars", chunk.len());
+            let _ = app_handle_clone.emit("chat_stream_chunk", (&chat_id_clone, &chunk));
             })
             .await
             .map_err(|e| e.to_string())?;
@@ -120,6 +122,7 @@ pub async fn send_message(
         });
     }
     
+    println!("[chat] stream end, response_len={}", response.content.len());
     Ok(response.into())
 }
 
@@ -148,6 +151,7 @@ pub async fn send_message_stream(
     
     // Create chat_id for event routing
     let chat_id = uuid::Uuid::new_v4().to_string();
+    println!("[chat] stream start, chat_id={}", chat_id);
     drop(state);
     
     // Emit start event
@@ -159,6 +163,7 @@ pub async fn send_message_stream(
     
     let response = llm_manager
         .chat_stream(messages, move |chunk| {
+            println!("[chat] chunk received: {} chars", chunk.len());
             let _ = app_handle_clone.emit("chat_stream_chunk", (&chat_id_clone, &chunk));
         })
         .await
@@ -172,6 +177,7 @@ pub async fn send_message_stream(
     let mut state = chat_state.write().await;
     state.messages.push(assistant_message);
     
+    println!("[chat] stream end, response_len={}", response.content.len());
     Ok(response.into())
 }
 
