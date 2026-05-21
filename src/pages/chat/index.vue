@@ -195,7 +195,6 @@ async function handleClose() {
 async function handleSettings() {
   // 使用 activate_window 确保设置窗口在最前，同时降低其他窗口层级
   await invoke('activate_window', { windowLabel: 'comprehensive_function' })
-  await chatWindow.hide()
 }
 
 // Format time
