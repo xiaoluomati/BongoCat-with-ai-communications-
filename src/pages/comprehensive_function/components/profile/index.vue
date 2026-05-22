@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { Button, Input, message, Modal, Tag } from 'ant-design-vue'
+import { useConfigStore } from '@/stores/config'
 import ProList from '@/components/pro-list/index.vue'
 import ProListItem from '@/components/pro-list-item/index.vue'
 
@@ -52,7 +53,7 @@ const newDateValue = ref('')
 async function loadProfile() {
   loading.value = true
   try {
-    const data = await invoke<any>('get_user_profile')
+    const data = await invoke<any>('get_user_profile', { characterId: configStore.currentCharacterId })
     profileData.value = {
       user_name: data.user_name || null,
       traits: data.traits || [],
@@ -82,7 +83,7 @@ function openEdit() {
 
 async function saveProfile() {
   try {
-    await invoke('save_user_profile', { profile: editForm.value })
+    await invoke('save_user_profile', { characterId: configStore.currentCharacterId, profile: editForm.value })
     profileData.value = JSON.parse(JSON.stringify(editForm.value))
     message.success('保存成功')
     isModalOpen.value = false
@@ -144,11 +145,20 @@ function getDatesText(dates: Record<string, string>) {
   return Object.entries(dates).map(([k, v]) => `${k}: ${v}`).join('， ')
 }
 
-onMounted(loadProfile)
+onMounted(async () => {
+  await configStore.init()
+  currentCharacterName.value = configStore.currentCharacter?.name || '未知角色'
+  await loadProfile()
+})
 </script>
 
 <template>
-  <ProList :loading="loading">
+  <!-- Character Badge -->
+    <div class="mb-4 flex items-center gap-2">
+      <span class="text-sm text-gray-500">{{ currentCharacterName }} 的用户画像</span>
+    </div>
+
+    <ProList :loading="loading">
     <!-- Header -->
     <div class="mb-4 flex items-center justify-between">
       <div></div>
@@ -206,7 +216,7 @@ onMounted(loadProfile)
   </ProList>
 
   <!-- Edit Modal -->
-  <Modal v-model:open="isModalOpen" title="编辑用户画像" width="600" @ok="saveProfile">
+  <Modal v-model:open="isModalOpen" :title="`编辑 ${currentCharacterName} 的用户画像`" width="600" @ok="saveProfile">
     <div class="space-y-4 max-h-[60vh] overflow-y-auto">
       <!-- User Name -->
       <div>
