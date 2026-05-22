@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { DeleteOutlined, DownloadOutlined } from '@ant-design/icons-vue'
-import { Button, message, Modal, Spin } from 'ant-design-vue'
+import { Button, Dropdown, message, Modal, Spin } from 'ant-design-vue'
 import { invoke } from '@tauri-apps/api/core'
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted } from 'vue'
+
+import { useConfigStore } from '@/stores/config'
 
 interface ChatMessage {
   id: string
@@ -20,9 +22,9 @@ interface MemoryInfo {
   chat_days: number
   weekly_summaries: number
   monthly_summaries: number
-  storage_path: string
 }
 
+const configStore = useConfigStore()
 const loading = ref(false)
 const memoryInfo = ref<MemoryInfo | null>(null)
 const todayChats = ref<DayChat[]>([])
@@ -32,30 +34,18 @@ const allChats = ref<DayChat[]>([])
 const expandedSections = ref<Set<string>>(new Set(['today']))
 const selectedChat = ref<{ date: string; messages: ChatMessage[] } | null>(null)
 
-onMounted(async () => {
-  await loadMemoryInfo()
-  await loadAllChats()
-})
-
-async function loadMemoryInfo() {
-  try {
-    memoryInfo.value = await invoke<MemoryInfo>('get_memory_info')
-  } catch (err) {
-    console.error('Failed to load memory info:', err)
-  }
-}
-
-async function loadAllChats() {
+async function loadAll() {
+  const charId = configStore.currentCharacterId
   loading.value = true
   try {
-    const dates = await invoke<string[]>('get_chat_dates')
+    const dates = await invoke<string[]>('get_chat_dates', { characterId: charId })
     const today = new Date().toISOString().split('T')[0]
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
     const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
     const all: DayChat[] = []
     for (const date of dates) {
-      const chat = await invoke<DayChat>('get_chat_by_date', { date })
+      const chat = await invoke<DayChat>('get_chat_by_date', { characterId: charId, date })
       all.push(chat)
     }
 
@@ -70,10 +60,24 @@ async function loadAllChats() {
   }
 }
 
+onMounted(async () => {
+  await configStore.init()
+  memoryInfo.value = await invoke<MemoryInfo>('get_character_memory_info', { characterId: configStore.currentCharacterId })
+  await loadAll()
+})
+
 async function loadChatForDate(date: string) {
+  // If clicking the already selected chat, toggle close it
+  if (selectedChat.value?.date === date) {
+    selectedChat.value = null
+    return
+  }
   loading.value = true
   try {
-    selectedChat.value = await invoke<DayChat>('get_chat_by_date', { date })
+    selectedChat.value = await invoke<DayChat>('get_chat_by_date', {
+      characterId: configStore.currentCharacterId,
+      date,
+    })
   } catch (err) {
     console.error('Failed to load chat:', err)
     message.error('加载对话失败')
@@ -100,7 +104,9 @@ function formatTime(timestamp: number): string {
 
 async function handleExport() {
   try {
-    const markdown = await invoke<string>('export_chats_markdown')
+    const markdown = await invoke<string>('export_chats_markdown', {
+      characterId: configStore.currentCharacterId,
+    })
     const blob = new Blob([markdown], { type: 'text/markdown' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -115,19 +121,35 @@ async function handleExport() {
   }
 }
 
-async function handleClear() {
+function handleClearAction(range: string) {
+  const charName = configStore.currentCharacter?.name || '当前'
+  const rangeLabel: Record<string, string> = {
+    today: '今天',
+    week: '本周',
+    month: '本月',
+    all: '全部',
+  }
   Modal.confirm({
-    title: '清空记忆',
-    content: '确定要清空所有对话记忆吗？此操作无法撤销。',
-    okText: '确定清空',
+    title: `清空${rangeLabel[range]}记忆`,
+    content: `将删除「${charName}」角色的${rangeLabel[range]}记忆，是否继续？`,
+    okText: '确认删除',
     okType: 'danger',
-    onOk: async () => {
+    async onOk() {
       try {
-        await invoke('clear_all_chats')
+        if (range === 'all') {
+          await invoke('clear_all_chats', { characterId: configStore.currentCharacterId })
+        } else {
+          await invoke('clear_chat_by_range', {
+            characterId: configStore.currentCharacterId,
+            range,
+          })
+        }
         message.success('记忆已清空')
-        await loadAllChats()
-        await loadMemoryInfo()
         selectedChat.value = null
+        memoryInfo.value = await invoke<MemoryInfo>('get_character_memory_info', {
+          characterId: configStore.currentCharacterId,
+        })
+        await loadAll()
       } catch (err) {
         console.error('Failed to clear:', err)
         message.error('清空失败')
@@ -135,6 +157,13 @@ async function handleClear() {
     },
   })
 }
+
+const clearMenuItems = [
+  { key: 'today', label: '清空今天记忆' },
+  { key: 'week', label: '清空本周记忆' },
+  { key: 'month', label: '清空本月记忆' },
+  { key: 'all', label: '清空全部记忆' },
+]
 
 function getDateLabel(chat: DayChat): string {
   const today = new Date().toISOString().split('T')[0]
@@ -148,6 +177,12 @@ function getDateLabel(chat: DayChat): string {
 <template>
   <div class="memory-container">
     <Spin :spinning="loading">
+      <!-- 角色标识 -->
+      <div class="character-badge">
+        <span class="character-name">{{ configStore.currentCharacter?.name || '未选中角色' }}</span>
+        <span class="character-hint">的记忆</span>
+      </div>
+
       <!-- 统计卡片 -->
       <div v-if="memoryInfo" class="stats-row">
         <div class="stat-card">
@@ -255,11 +290,14 @@ function getDateLabel(chat: DayChat): string {
         </div>
       </div>
 
-      <!-- 聊天详情 -->
+      <!-- 聊天详情（可折叠） -->
       <div v-if="selectedChat" class="chat-detail-card">
-        <div class="chat-detail-header">
-          <span class="chat-detail-date">{{ selectedChat.date }}</span>
-          <span class="chat-detail-count">{{ selectedChat.messages.length }} 条消息</span>
+        <div class="chat-detail-header" @click="selectedChat = null">
+          <div>
+            <span class="chat-detail-date">{{ selectedChat.date }}</span>
+            <span class="chat-detail-count">{{ selectedChat.messages.length }} 条消息</span>
+          </div>
+          <span class="collapse-hint">点击收起</span>
         </div>
         <div class="chat-messages">
           <div
@@ -269,7 +307,7 @@ function getDateLabel(chat: DayChat): string {
             :class="msg.role"
           >
             <div class="msg-header">
-              <span class="msg-role">{{ msg.role === 'user' ? '用户' : 'Bongo' }}</span>
+              <span class="msg-role">{{ msg.role === 'user' ? '我' : configStore.currentCharacter?.name || 'Bongo' }}</span>
               <span class="msg-time">{{ formatTime(msg.timestamp) }}</span>
             </div>
             <div class="msg-content">{{ msg.content }}</div>
@@ -283,10 +321,24 @@ function getDateLabel(chat: DayChat): string {
           <template #icon><DownloadOutlined /></template>
           导出对话
         </Button>
-        <Button danger @click="handleClear">
-          <template #icon><DeleteOutlined /></template>
-          清空记忆
-        </Button>
+        <Dropdown>
+          <Button danger>
+            <template #icon><DeleteOutlined /></template>
+            清空记忆
+          </Button>
+          <template #overlay>
+            <div class="clear-dropdown">
+              <div
+                v-for="item in clearMenuItems"
+                :key="item.key"
+                class="clear-dropdown-item"
+                @click="handleClearAction(item.key)"
+              >
+                {{ item.label }}
+              </div>
+            </div>
+          </template>
+        </Dropdown>
       </div>
     </Spin>
   </div>
@@ -296,6 +348,24 @@ function getDateLabel(chat: DayChat): string {
 .memory-container {
   padding: 16px;
   user-select: none;
+}
+
+.character-badge {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+
+.character-name {
+  font-size: 16px;
+  font-weight: bold;
+  color: #333;
+}
+
+.character-hint {
+  font-size: 13px;
+  color: #999;
 }
 
 .stats-row {
@@ -345,12 +415,6 @@ function getDateLabel(chat: DayChat): string {
   background: #fafafa;
   cursor: pointer;
   user-select: none;
-  border-bottom: 1px solid transparent;
-}
-
-.section-card:has(.section-content[style*="display: block"]) .section-header,
-.section-header:has(+ .section-content:not(:empty)) {
-  border-bottom-color: #e8e8e8;
 }
 
 .section-title {
@@ -428,6 +492,7 @@ function getDateLabel(chat: DayChat): string {
   padding: 12px 16px;
   background: #fafafa;
   border-bottom: 1px solid #e8e8e8;
+  cursor: pointer;
 }
 
 .chat-detail-date {
@@ -437,6 +502,12 @@ function getDateLabel(chat: DayChat): string {
 }
 
 .chat-detail-count {
+  font-size: 12px;
+  color: #999;
+  margin-left: 8px;
+}
+
+.collapse-hint {
   font-size: 12px;
   color: #999;
 }
@@ -497,5 +568,29 @@ function getDateLabel(chat: DayChat): string {
 .action-row {
   display: flex;
   gap: 8px;
+}
+
+.clear-dropdown {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  padding: 4px 0;
+  min-width: 140px;
+}
+
+.clear-dropdown-item {
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #333;
+  transition: background-color 0.15s;
+}
+
+.clear-dropdown-item:hover {
+  background: #f5f5f5;
+}
+
+.clear-dropdown-item:last-child {
+  color: #ff4d4f;
 }
 </style>

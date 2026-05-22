@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 
 import { useTTSStore } from './tts'
+import { useConfigStore } from './config'
 import { createParserContext, parseEmotionChunk, getEmotionPrompt, extractPureText, type ParserContext } from '@/utils/emotion'
 
 export interface TTSAudioFile {
@@ -24,6 +25,8 @@ export interface ChatMessage {
 }
 
 export const useChatStore = defineStore('chat', () => {
+  const configStore = useConfigStore()
+
   const messages = ref<ChatMessage[]>([])
   const isLoading = ref(false)
   const enabled = ref(false)
@@ -53,6 +56,7 @@ export const useChatStore = defineStore('chat', () => {
   async function saveMessageToMemory(message: ChatMessage) {
     try {
       await invoke('save_chat_message', {
+        characterId: configStore.currentCharacterId,
         message: {
           id: message.id,
           role: message.role,
@@ -349,7 +353,7 @@ export const useChatStore = defineStore('chat', () => {
   // Export as markdown
   async function exportChatsMarkdown(): Promise<string> {
     try {
-      return await invoke<string>('export_chats_markdown')
+      return await invoke<string>('export_chats_markdown', { characterId: configStore.currentCharacterId })
     } catch (err) {
       console.error('Failed to export markdown:', err)
       return '# 导出失败'
@@ -377,6 +381,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   return {
+    configStore,
     messages,
     isLoading,
     enabled,
