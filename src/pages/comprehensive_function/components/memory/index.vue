@@ -39,7 +39,7 @@ async function loadAll() {
   const charId = configStore.currentCharacterId
   loading.value = true
   try {
-    const dates = await invoke<string[]>('get_chat_dates', { characterId: charId })
+    const dates = await invoke<string[]>('get_chat_dates', { character_id: charId })
     const today = new Date().toISOString().split('T')[0]
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
     const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
@@ -65,7 +65,7 @@ onMounted(async () => {
   await configStore.init()
   // Load user profile for display name
   try {
-    const profile = await invoke<any>('get_user_profile', { characterId: configStore.currentCharacterId })
+    const profile = await invoke<any>('get_user_profile', { character_id: configStore.currentCharacterId })
     userName.value = profile?.user_name || '我'
   } catch {
     userName.value = '我'
@@ -145,10 +145,10 @@ function handleClearAction(range: string) {
     async onOk() {
       try {
         if (range === 'all') {
-          await invoke('clear_all_chats', { characterId: configStore.currentCharacterId })
+          await invoke('clear_all_chats', { character_id: configStore.currentCharacterId })
         } else {
           await invoke('clear_chat_by_range', {
-            characterId: configStore.currentCharacterId,
+            character_id: configStore.currentCharacterId,
             range,
           })
         }

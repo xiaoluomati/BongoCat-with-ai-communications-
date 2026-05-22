@@ -56,7 +56,7 @@ export const useChatStore = defineStore('chat', () => {
   async function saveMessageToMemory(message: ChatMessage) {
     try {
       await invoke('save_chat_message', {
-        characterId: configStore.currentCharacterId,
+        character_id: configStore.currentCharacterId,
         message: {
           id: message.id,
           role: message.role,
@@ -313,7 +313,7 @@ export const useChatStore = defineStore('chat', () => {
   // Load today's chat from file
   async function loadHistory() {
     try {
-      const todayChat = await invoke<any>('get_today_chat', { characterId: configStore.currentCharacterId })
+      const todayChat = await invoke<any>('get_today_chat', { character_id: configStore.currentCharacterId })
       if (todayChat && todayChat.messages) {
         messages.value = todayChat.messages.map((msg: any) => ({
           id: msg.id || `msg_${msg.timestamp}`,

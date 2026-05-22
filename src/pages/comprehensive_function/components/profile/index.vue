@@ -56,7 +56,7 @@ async function loadProfile() {
   loading.value = true
   try {
     const charId = configStore.currentCharacterId || 'cat'
-    const data = await invoke<any>('get_user_profile', { characterId: charId })
+    const data = await invoke<any>('get_user_profile', { character_id: charId })
     profileData.value = {
       user_name: data.user_name || null,
       traits: data.traits || [],
@@ -86,7 +86,7 @@ function openEdit() {
 
 async function saveProfile() {
   try {
-    await invoke('save_user_profile', { characterId: configStore.currentCharacterId || 'cat', profile: editForm.value })
+    await invoke('save_user_profile', { character_id: configStore.currentCharacterId || 'cat', profile: editForm.value })
     profileData.value = JSON.parse(JSON.stringify(editForm.value))
     message.success('保存成功')
     isModalOpen.value = false
