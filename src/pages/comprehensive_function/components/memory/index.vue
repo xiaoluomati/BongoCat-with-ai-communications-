@@ -46,7 +46,7 @@ async function loadAll() {
 
     const all: DayChat[] = []
     for (const date of dates) {
-      const chat = await invoke<DayChat>('get_chat_by_date', { characterId: charId, date })
+      const chat = await invoke<DayChat>('get_chat_by_date', { character_id: charId, date })
       all.push(chat)
     }
 
@@ -70,7 +70,7 @@ onMounted(async () => {
   } catch {
     userName.value = '我'
   }
-  memoryInfo.value = await invoke<MemoryInfo>('get_character_memory_info', { characterId: configStore.currentCharacterId })
+  memoryInfo.value = await invoke<MemoryInfo>('get_character_memory_info', { character_id: configStore.currentCharacterId })
   await loadAll()
 })
 
@@ -83,7 +83,7 @@ async function loadChatForDate(date: string) {
   loading.value = true
   try {
     selectedChat.value = await invoke<DayChat>('get_chat_by_date', {
-      characterId: configStore.currentCharacterId,
+      character_id: configStore.currentCharacterId,
       date,
     })
   } catch (err) {
@@ -113,7 +113,7 @@ function formatTime(timestamp: number): string {
 async function handleExport() {
   try {
     const markdown = await invoke<string>('export_chats_markdown', {
-      characterId: configStore.currentCharacterId,
+      character_id: configStore.currentCharacterId,
     })
     const blob = new Blob([markdown], { type: 'text/markdown' })
     const url = URL.createObjectURL(blob)
@@ -155,7 +155,7 @@ function handleClearAction(range: string) {
         message.success('记忆已清空')
         selectedChat.value = null
         memoryInfo.value = await invoke<MemoryInfo>('get_character_memory_info', {
-          characterId: configStore.currentCharacterId,
+          character_id: configStore.currentCharacterId,
         })
         await loadAll()
       } catch (err) {
