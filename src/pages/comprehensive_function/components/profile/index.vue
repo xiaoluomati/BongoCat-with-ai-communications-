@@ -53,7 +53,8 @@ const newDateValue = ref('')
 async function loadProfile() {
   loading.value = true
   try {
-    const data = await invoke<any>('get_user_profile', { characterId: configStore.currentCharacterId })
+    const charId = configStore.currentCharacterId || 'cat'
+    const data = await invoke<any>('get_user_profile', { characterId: charId })
     profileData.value = {
       user_name: data.user_name || null,
       traits: data.traits || [],
@@ -83,7 +84,7 @@ function openEdit() {
 
 async function saveProfile() {
   try {
-    await invoke('save_user_profile', { characterId: configStore.currentCharacterId, profile: editForm.value })
+    await invoke('save_user_profile', { characterId: configStore.currentCharacterId || 'cat', profile: editForm.value })
     profileData.value = JSON.parse(JSON.stringify(editForm.value))
     message.success('保存成功')
     isModalOpen.value = false
@@ -147,7 +148,8 @@ function getDatesText(dates: Record<string, string>) {
 
 onMounted(async () => {
   await configStore.init()
-  currentCharacterName.value = configStore.currentCharacter?.name || '未知角色'
+  const charId = configStore.currentCharacterId || 'cat'
+  currentCharacterName.value = configStore.currentCharacter?.name || charId
   await loadProfile()
 })
 </script>
