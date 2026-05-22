@@ -313,7 +313,7 @@ export const useChatStore = defineStore('chat', () => {
   // Load today's chat from file
   async function loadHistory() {
     try {
-      const todayChat = await invoke<any>('get_today_chat')
+      const todayChat = await invoke<any>('get_today_chat', { characterId: configStore.currentCharacterId })
       if (todayChat && todayChat.messages) {
         messages.value = todayChat.messages.map((msg: any) => ({
           id: msg.id || `msg_${msg.timestamp}`,
