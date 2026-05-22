@@ -19,7 +19,8 @@ pub use memory::{
     save_chat_message, get_today_chat, get_chat_by_date, get_chat_dates,
     save_weekly_summary, get_weekly_summaries, save_monthly_summary, get_monthly_summaries,
     save_quarterly_summary, get_quarterly_summaries, save_yearly_summary, get_yearly_summaries,
-    export_all_chats, export_chats_markdown, clear_all_chats, get_memory_info
+    export_all_chats, export_chats_markdown, clear_all_chats, clear_chat_by_range,
+    get_character_memory_info, get_memory_info
 };
 
 pub use prompt::*;

@@ -341,6 +341,17 @@ pub fn save_character(character: Character) -> Result<(), String> {
     let content = serde_json::to_string_pretty(&character).map_err(|e| e.to_string())?;
     fs::write(&config_path, content).map_err(|e| e.to_string())?;
     
+    // Ensure per-character dirs exist
+    crate::commands::character::ensure_character_dirs(&character.id)?;
+    
+    // Migrate old global profile if it exists and this is the first character
+    let old_profile_path = get_app_data_dir().join("profile").join("user_profile.json");
+    let new_profile_path = get_app_data_dir().join("profile").join(&character.id).join("user_profile.json");
+    if old_profile_path.exists() && !new_profile_path.exists() {
+        let content = fs::read_to_string(&old_profile_path).map_err(|e| e.to_string())?;
+        fs::write(&new_profile_path, content).map_err(|e| e.to_string())?;
+    }
+    
     Ok(())
 }
 

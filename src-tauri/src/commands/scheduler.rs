@@ -18,30 +18,36 @@ pub async fn start_scheduler(llm_manager: Arc<LLMManager>) {
         loop {
             check_interval.tick().await;
             
+            // Get current character ID for all operations
+            let character_id = match crate::commands::config::load_config() {
+                Ok(config) => config.characters.current,
+                Err(_) => continue,
+            };
+            
             // 检查并生成周总结
             if should_generate_weekly_summary() {
-                if let Err(e) = generate_weekly_summary(&llm_manager).await {
+                if let Err(e) = generate_weekly_summary(&character_id, &llm_manager).await {
                     eprintln!("Failed to generate weekly summary: {}", e);
                 }
             }
             
             // 检查并生成月总结
             if should_generate_monthly_summary() {
-                if let Err(e) = generate_monthly_summary(&llm_manager).await {
+                if let Err(e) = generate_monthly_summary(&character_id, &llm_manager).await {
                     eprintln!("Failed to generate monthly summary: {}", e);
                 }
             }
             
             // 检查并生成季度总结
             if should_generate_quarterly_summary() {
-                if let Err(e) = generate_quarterly_summary(&llm_manager).await {
+                if let Err(e) = generate_quarterly_summary(&character_id, &llm_manager).await {
                     eprintln!("Failed to generate quarterly summary: {}", e);
                 }
             }
             
             // 检查并生成年度总结
             if should_generate_yearly_summary() {
-                if let Err(e) = generate_yearly_summary(&llm_manager).await {
+                if let Err(e) = generate_yearly_summary(&character_id, &llm_manager).await {
                     eprintln!("Failed to generate yearly summary: {}", e);
                 }
             }
@@ -50,7 +56,7 @@ pub async fn start_scheduler(llm_manager: Arc<LLMManager>) {
 }
 
 /// 生成周总结
-async fn generate_weekly_summary(llm: &LLMManager) -> Result<(), String> {
+async fn generate_weekly_summary(character_id: &str, llm: &LLMManager) -> Result<(), String> {
     let (week_start, week_end, _week_label) = get_current_week_dates();
     let now = Local::now();
     let week_num = now.format("%W").to_string();
@@ -66,7 +72,7 @@ async fn generate_weekly_summary(llm: &LLMManager) -> Result<(), String> {
     let mut current = start_date;
     while current <= end_date {
         let date_str = current.format("%Y-%m-%d").to_string();
-        if let Ok(day_chat) = get_chat_by_date(date_str) {
+        if let Ok(day_chat) = get_chat_by_date(character_id.to_string(), date_str) {
             for msg in day_chat.messages {
                 all_messages.push(format!("{}: {}", msg.role, msg.content));
             }
@@ -126,7 +132,7 @@ async fn generate_weekly_summary(llm: &LLMManager) -> Result<(), String> {
                 .unwrap_or(0) as i32,
         };
         
-        save_weekly_summary(weekly_summary)?;
+        save_weekly_summary(character_id.to_string(), weekly_summary)?;
         println!("Weekly summary generated for {}", week_label);
     }
     
@@ -134,7 +140,7 @@ async fn generate_weekly_summary(llm: &LLMManager) -> Result<(), String> {
 }
 
 /// 生成月度总结
-async fn generate_monthly_summary(llm: &LLMManager) -> Result<(), String> {
+async fn generate_monthly_summary(character_id: &str, llm: &LLMManager) -> Result<(), String> {
     let now = Local::now();
     let month_label = now.format("%Y-%m").to_string();
     
@@ -156,7 +162,7 @@ async fn generate_monthly_summary(llm: &LLMManager) -> Result<(), String> {
     
     for day in 1..=days_in_month {
         let date_str = format!("{:04}-{:02}-{:02}", year, month, day);
-        if let Ok(day_chat) = get_chat_by_date(date_str.clone()) {
+        if let Ok(day_chat) = get_chat_by_date(character_id.to_string(), date_str.clone()) {
             for msg in day_chat.messages {
                 all_messages.push(format!("{}: {}", msg.role, msg.content));
             }
@@ -216,7 +222,7 @@ async fn generate_monthly_summary(llm: &LLMManager) -> Result<(), String> {
                 .unwrap_or_default(),
         };
         
-        save_monthly_summary(monthly_summary)?;
+        save_monthly_summary(character_id.to_string(), monthly_summary)?;
         println!("Monthly summary generated for {}", month_label);
     }
     
@@ -224,13 +230,13 @@ async fn generate_monthly_summary(llm: &LLMManager) -> Result<(), String> {
 }
 
 /// 生成季度总结
-async fn generate_quarterly_summary(llm: &LLMManager) -> Result<(), String> {
+async fn generate_quarterly_summary(character_id: &str, llm: &LLMManager) -> Result<(), String> {
     let now = Local::now();
     let quarter = (now.month() - 1) / 3 + 1;
     let quarter_label = format!("{}-Q{}", now.year(), quarter);
     
     // 收集本季度所有月总结
-    let monthly_summaries = crate::commands::memory::get_monthly_summaries()?;
+    let monthly_summaries = crate::commands::memory::get_monthly_summaries(character_id.to_string())?;
     let summaries_text: Vec<String> = monthly_summaries.iter()
         .filter(|s| s.month.starts_with(&now.year().to_string()))
         .map(|s| format!("{}: {} - {}", s.month, s.relationship_growth, s.milestones.join(", ")))
@@ -267,7 +273,7 @@ async fn generate_quarterly_summary(llm: &LLMManager) -> Result<(), String> {
             milestone: result.get("milestone").and_then(|v| v.as_str()).unwrap_or("").to_string(),
         };
         
-        crate::commands::memory::save_quarterly_summary(q_summary)?;
+        crate::commands::memory::save_quarterly_summary(character_id.to_string(), q_summary)?;
         println!("Quarterly summary generated for {}", quarter_label);
     }
     
@@ -275,12 +281,12 @@ async fn generate_quarterly_summary(llm: &LLMManager) -> Result<(), String> {
 }
 
 /// 生成年度总结
-async fn generate_yearly_summary(llm: &LLMManager) -> Result<(), String> {
+async fn generate_yearly_summary(character_id: &str, llm: &LLMManager) -> Result<(), String> {
     let now = Local::now();
     let year_label = now.year().to_string();
     
     // 收集本年所有季度/月度总结
-    let quarterly_summaries = crate::commands::memory::get_quarterly_summaries()?;
+    let quarterly_summaries = crate::commands::memory::get_quarterly_summaries(character_id.to_string())?;
     let summaries_text: Vec<String> = quarterly_summaries.iter()
         .filter(|s| s.quarter.starts_with(&year_label))
         .map(|s| format!("{}: {} - {}", s.quarter, s.summary, s.important_events.join(", ")))
@@ -317,7 +323,7 @@ async fn generate_yearly_summary(llm: &LLMManager) -> Result<(), String> {
             memorable_moments: result.get("memorable_moments").and_then(|v| v.as_array()).map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect()).unwrap_or_default(),
         };
         
-        crate::commands::memory::save_yearly_summary(y_summary)?;
+        crate::commands::memory::save_yearly_summary(character_id.to_string(), y_summary)?;
         println!("Yearly summary generated for {}", year_label);
     }
     
@@ -327,25 +333,29 @@ async fn generate_yearly_summary(llm: &LLMManager) -> Result<(), String> {
 /// 手动触发周总结生成
 #[tauri::command]
 pub async fn trigger_weekly_summary(llm_manager: State<'_, Arc<LLMManager>>) -> Result<(), String> {
-    generate_weekly_summary(&llm_manager).await
+    let character_id = crate::commands::config::load_config()?.characters.current;
+    generate_weekly_summary(&character_id, &llm_manager).await
 }
 
 /// 手动触发月总结生成
 #[tauri::command]
 pub async fn trigger_monthly_summary(llm_manager: State<'_, Arc<LLMManager>>) -> Result<(), String> {
-    generate_monthly_summary(&llm_manager).await
+    let character_id = crate::commands::config::load_config()?.characters.current;
+    generate_monthly_summary(&character_id, &llm_manager).await
 }
 
 /// 手动触发季度总结生成
 #[tauri::command]
 pub async fn trigger_quarter(llm_manager: State<'_, Arc<LLMManager>>) -> Result<(), String> {
-    generate_quarterly_summary(&llm_manager).await
+    let character_id = crate::commands::config::load_config()?.characters.current;
+    generate_quarterly_summary(&character_id, &llm_manager).await
 }
 
 /// 手动触发年度总结生成
 #[tauri::command]
 pub async fn trigger_year(llm_manager: State<'_, Arc<LLMManager>>) -> Result<(), String> {
-    generate_yearly_summary(&llm_manager).await
+    let character_id = crate::commands::config::load_config()?.characters.current;
+    generate_yearly_summary(&character_id, &llm_manager).await
 }
 
 // ============ 辅助函数 - 判断是否需要生成总结 ============

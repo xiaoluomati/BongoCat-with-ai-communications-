@@ -115,7 +115,11 @@ pub async fn send_message(
         // Trigger profile update in background
         let llm_manager = llm_manager.inner().clone();
         tokio::spawn(async move {
-            match crate::commands::character::trigger_profile_update(llm_manager).await {
+            let character_id = match crate::commands::config::load_config() {
+                Ok(config) => config.characters.current,
+                Err(_) => return,
+            };
+            match crate::commands::character::trigger_profile_update(character_id, llm_manager).await {
                 Ok(_) => {}
                 Err(_) => {} // silently ignore errors
             }

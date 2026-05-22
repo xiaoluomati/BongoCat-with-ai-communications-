@@ -10,12 +10,21 @@ use chrono::Local;
 
 fn get_data_dir() -> PathBuf { get_app_data_dir() }
 
-fn get_profile_dir() -> PathBuf {
-    get_data_dir().join("profile")
+fn get_profile_dir(character_id: &str) -> PathBuf {
+    get_data_dir().join("profile").join(character_id)
 }
 
-fn ensure_dirs() -> Result<(), String> {
-    fs::create_dir_all(get_profile_dir()).map_err(|e| e.to_string())?;
+#[allow(dead_code)]
+fn get_memory_base_dir() -> PathBuf {
+    get_data_dir().join("memory")
+}
+
+pub fn ensure_character_dirs(character_id: &str) -> Result<(), String> {
+    let base = get_data_dir();
+    fs::create_dir_all(base.join("profile").join(character_id)).map_err(|e| e.to_string())?;
+    fs::create_dir_all(base.join("memory").join(character_id).join("chat")).map_err(|e| e.to_string())?;
+    fs::create_dir_all(base.join("memory").join(character_id).join("weekly")).map_err(|e| e.to_string())?;
+    fs::create_dir_all(base.join("memory").join(character_id).join("monthly")).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -61,9 +70,9 @@ pub struct CharacterBrief {
 
 /// 获取用户画像
 #[tauri::command]
-pub fn get_user_profile() -> Result<UserProfile, String> {
-    ensure_dirs()?;
-    let profile_path = get_profile_dir().join("user_profile.json");
+pub fn get_user_profile(character_id: String) -> Result<UserProfile, String> {
+    ensure_character_dirs(&character_id)?;
+    let profile_path = get_profile_dir(&character_id).join("user_profile.json");
     
     if !profile_path.exists() {
         return Ok(UserProfile::default());
@@ -77,9 +86,9 @@ pub fn get_user_profile() -> Result<UserProfile, String> {
 
 /// 保存用户画像
 #[tauri::command]
-pub fn save_user_profile(profile: UserProfile) -> Result<(), String> {
-    ensure_dirs()?;
-    let profile_path = get_profile_dir().join("user_profile.json");
+pub fn save_user_profile(character_id: String, profile: UserProfile) -> Result<(), String> {
+    ensure_character_dirs(&character_id)?;
+    let profile_path = get_profile_dir(&character_id).join("user_profile.json");
     let content = serde_json::to_string_pretty(&profile).map_err(|e| e.to_string())?;
     fs::write(&profile_path, content).map_err(|e| e.to_string())?;
     Ok(())
@@ -87,8 +96,8 @@ pub fn save_user_profile(profile: UserProfile) -> Result<(), String> {
 
 /// 更新对话计数并检查是否需要更新画像
 #[tauri::command]
-pub fn check_and_update_profile(conversation_count: u32, force_update: bool) -> Result<bool, String> {
-    let mut profile = get_user_profile()?;
+pub fn check_and_update_profile(character_id: String, conversation_count: u32, force_update: bool) -> Result<bool, String> {
+    let mut profile = get_user_profile(character_id.clone())?;
     let old_count = profile.conversation_count;
     profile.conversation_count = conversation_count;
     
@@ -97,7 +106,7 @@ pub fn check_and_update_profile(conversation_count: u32, force_update: bool) -> 
     
     if needs_update {
         profile.last_updated = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
-        save_user_profile(profile)?;
+        save_user_profile(character_id, profile)?;
         return Ok(true);
     }
     
@@ -106,11 +115,11 @@ pub fn check_and_update_profile(conversation_count: u32, force_update: bool) -> 
 
 /// 手动触发用户画像更新 (异步)
 // #[tauri::command]  // 移除 command 属性，作为内部函数使用
-pub async fn trigger_profile_update(llm_manager: Arc<crate::llm::LLMManager>) -> Result<UserProfile, String> {
+pub async fn trigger_profile_update(character_id: String, llm_manager: Arc<crate::llm::LLMManager>) -> Result<UserProfile, String> {
     use crate::llm::ChatMessage;
     
     // 获取最近对话
-    let chat_result = crate::commands::memory::get_today_chat();
+    let chat_result = crate::commands::memory::get_today_chat(character_id.clone());
     let messages: Vec<_> = match chat_result {
         Ok(chat) => chat.messages.iter().take(50).cloned().collect(),
         Err(_) => vec![],
@@ -147,7 +156,7 @@ pub async fn trigger_profile_update(llm_manager: Arc<crate::llm::LLMManager>) ->
     
     // 解析响应
     if let Ok(data) = serde_json::from_str::<serde_json::Value>(&response.content) {
-        let mut profile = get_user_profile()?;
+        let mut profile = get_user_profile(character_id.clone())?;
         
         profile.user_name = data.get("user_name").and_then(|v| v.as_str()).map(String::from);
         profile.traits = data.get("traits")
@@ -203,7 +212,7 @@ pub async fn trigger_profile_update(llm_manager: Arc<crate::llm::LLMManager>) ->
         
         profile.last_updated = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
         
-        save_user_profile(profile.clone())?;
+        save_user_profile(character_id, profile.clone())?;
         return Ok(profile);
     }
     
