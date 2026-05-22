@@ -158,18 +158,16 @@ onMounted(async () => {
 </script>
 
 <template>
-  <!-- Character Badge -->
-    <div class="mb-4 flex items-center gap-2">
-      <span class="text-sm text-gray-500">{{ currentCharacterName }} 的用户画像</span>
+  <!-- Character Badge + Edit Button -->
+  <div class="profile-header">
+    <div class="profile-title">
+      <span class="profile-name">{{ currentCharacterName }}</span>
+      <span class="profile-subtitle">用户画像</span>
     </div>
+    <Button type="primary" size="small" @click="openEdit">编辑</Button>
+  </div>
 
-    <ProList :loading="loading">
-    <!-- Header -->
-    <div class="mb-4 flex items-center justify-between">
-      <div></div>
-      <Button type="primary" size="small" @click="openEdit">编辑</Button>
-    </div>
-
+  <ProList :loading="loading">
     <!-- Basic Info -->
     <ProListItem title="用户名" :description="profileData.user_name || '未设置'" />
     <ProListItem title="对话轮数" :description="String(profileData.conversation_count || 0)" />
@@ -280,3 +278,33 @@ onMounted(async () => {
     </div>
   </Modal>
 </template>
+
+<style scoped>
+.profile-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  background: #f5f5f5;
+  border-radius: 8px;
+  border: 1px solid #e8e8e8;
+}
+
+.profile-title {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.profile-name {
+  font-size: 16px;
+  font-weight: bold;
+  color: #333;
+}
+
+.profile-subtitle {
+  font-size: 14px;
+  color: #888;
+}
+</style>
