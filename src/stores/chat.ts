@@ -353,7 +353,7 @@ export const useChatStore = defineStore('chat', () => {
   // Export as markdown
   async function exportChatsMarkdown(): Promise<string> {
     try {
-      return await invoke<string>('export_chats_markdown', { characterId: configStore.currentCharacterId })
+      return await invoke<string>('export_chats_markdown', { character_id: configStore.currentCharacterId })
     } catch (err) {
       console.error('Failed to export markdown:', err)
       return '# 导出失败'
