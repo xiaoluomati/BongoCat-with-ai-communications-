@@ -35,6 +35,7 @@ export interface TTSConfigState {
 
 export const useConfigStore = defineStore('config', () => {
   // 角色相关
+  const initialized = ref(false)
   const currentCharacterId = ref('')
   const currentCharacter = ref<CharacterConfig | null>(null)
 
@@ -74,6 +75,7 @@ export const useConfigStore = defineStore('config', () => {
       currentCharacterId.value = cfg.characters?.current || 'cat'
       const charData = await invoke<any>('load_character', { id: currentCharacterId.value })
       currentCharacter.value = charData
+      initialized.value = true
 
       // 更新 LLM
       if (cfg.llm) {
@@ -138,7 +140,7 @@ export const useConfigStore = defineStore('config', () => {
   }
 
   return {
-    currentCharacterId, currentCharacter,
+    initialized, currentCharacterId, currentCharacter,
     llmConfig, ttsConfig,
     init, load,
     saveLLM, saveTTS, saveCharacter, switchCharacter,

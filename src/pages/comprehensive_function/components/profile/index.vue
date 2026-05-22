@@ -148,14 +148,9 @@ function getDatesText(dates: Record<string, string>) {
 
 onMounted(async () => {
   await configStore.init()
-  const charId = configStore.currentCharacterId || 'cat'
-  // Directly fetch character name from backend to avoid store initialization timing issues
-  try {
-    const charData = await invoke<any>('load_character', { id: charId })
-    currentCharacterName.value = charData?.name || charId
-  } catch {
-    currentCharacterName.value = charId
-  }
+  console.log('[profile] currentCharacterId:', configStore.currentCharacterId, 'initialized:', configStore.initialized)
+  console.log('[profile] currentCharacter:', configStore.currentCharacter)
+  currentCharacterName.value = configStore.currentCharacter?.name || configStore.currentCharacterId || 'unknown'
   await loadProfile()
 })
 </script>
