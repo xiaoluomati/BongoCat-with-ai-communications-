@@ -42,6 +42,7 @@ const profileData = ref<Profile>({
   last_updated: '',
 })
 
+const configStore = useConfigStore()
 const isModalOpen = ref(false)
 const editForm = ref<Profile>({} as Profile)
 const newTrait = ref('')
