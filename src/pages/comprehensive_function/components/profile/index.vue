@@ -44,6 +44,7 @@ const profileData = ref<Profile>({
 
 const configStore = useConfigStore()
 const isModalOpen = ref(false)
+const currentCharacterName = ref('')
 const editForm = ref<Profile>({} as Profile)
 const newTrait = ref('')
 const newPrefKey = ref('')
