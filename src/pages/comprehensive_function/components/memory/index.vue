@@ -26,6 +26,7 @@ interface MemoryInfo {
 
 const configStore = useConfigStore()
 const loading = ref(false)
+const userName = ref('我')
 const memoryInfo = ref<MemoryInfo | null>(null)
 const todayChats = ref<DayChat[]>([])
 const weekChats = ref<DayChat[]>([])
@@ -62,6 +63,13 @@ async function loadAll() {
 
 onMounted(async () => {
   await configStore.init()
+  // Load user profile for display name
+  try {
+    const profile = await invoke<any>('get_user_profile', { characterId: configStore.currentCharacterId })
+    userName.value = profile?.user_name || '我'
+  } catch {
+    userName.value = '我'
+  }
   memoryInfo.value = await invoke<MemoryInfo>('get_character_memory_info', { characterId: configStore.currentCharacterId })
   await loadAll()
 })
@@ -307,7 +315,7 @@ function getDateLabel(chat: DayChat): string {
             :class="msg.role"
           >
             <div class="msg-header">
-              <span class="msg-role">{{ msg.role === 'user' ? '我' : configStore.currentCharacter?.name || 'Bongo' }}</span>
+              <span class="msg-role">{{ msg.role === 'user' ? userName : configStore.currentCharacter?.name || 'Bongo' }}</span>
               <span class="msg-time">{{ formatTime(msg.timestamp) }}</span>
             </div>
             <div class="msg-content">{{ msg.content }}</div>
