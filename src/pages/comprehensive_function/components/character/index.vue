@@ -266,7 +266,7 @@ onMounted(() => {
   <!-- Edit/Create Modal -->
   <Modal
     v-model:open="isModalVisible"
-    :title="isEditing ? '编辑角色' : '新建角色'"
+    :title="isEditing && editingCharacter ? `编辑角色：${editingCharacter.name}` : '新建角色'"
     :width="700"
     @ok="saveCharacter"
   >
