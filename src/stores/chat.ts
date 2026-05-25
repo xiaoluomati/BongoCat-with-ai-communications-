@@ -363,7 +363,7 @@ export const useChatStore = defineStore('chat', () => {
   // Get memory info
   async function getMemoryInfo() {
     try {
-      return await invoke<any>('get_memory_info')
+      return await invoke<any>('get_memory_info', { character_id: configStore.currentCharacterId })
     } catch (err) {
       console.error('Failed to get memory info:', err)
       return null
@@ -373,7 +373,7 @@ export const useChatStore = defineStore('chat', () => {
   // Clear all chats
   async function clearAllChats() {
     try {
-      await invoke('clear_all_chats')
+      await invoke('clear_all_chats', { character_id: configStore.currentCharacterId })
       messages.value = []
     } catch (err) {
       console.error('Failed to clear all chats:', err)
