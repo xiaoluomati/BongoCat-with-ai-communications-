@@ -229,10 +229,10 @@ pub async fn trigger_profile_update(character_id: String, llm_manager: Arc<LLMMa
 2. 分析新对话，提炼新的性格特点、偏好、重要日期、互动和回忆
 3. 如果旧信息与新对话矛盾，以新对话为准
 4. 如果没有新对话中的某个维度信息，则保留旧画像中的对应内容
-5. 注意：对话记录中已标注准确时间，输出的日期必须使用对话中实际出现的时间，不得使用"未知"等占位文字
+5. date字段格式为YYYY-MM-DD，必须从对话时间[2026-05-25 10:30]中提取当天日期，不得使用"未知"等占位文字
 
 请按以下JSON格式输出（只需输出JSON，不要其他内容）：
-{{"user_name": "用户名或null", "traits": ["特点1", "特点2"], "preferences": {{"喜欢音乐": "古典音乐"}}, "important_dates": {{"生日": "06-15"}}, "recent_interactions": [{{"date": "2024-01-01", "activity": "一起听音乐", "summary": "用户分享了他喜欢的古典音乐"}}], "special_memories": [{{"title": "第一次聊天", "description": "用户第一次打开应用和我们聊天", "date": "2024-01-01", "tags": ["回忆"]}}]}}"#,
+{{"user_name": "用户名或null", "traits": ["特点1", "特点2"], "preferences": {{"喜欢音乐": "古典音乐"}}, "important_dates": {{"生日": "06-15"}}, "recent_interactions": [{{"date": "2026-05-25", "activity": "一起听音乐", "summary": "用户分享了他喜欢的古典音乐"}}], "special_memories": [{{"title": "第一次聊天", "description": "用户第一次打开应用和我们聊天", "date": "2026-05-25", "tags": ["回忆"]}}]}}"#,
         profile_summary, new_chat_text);
 
     let messages = vec![ChatMessage::user(&prompt)];
