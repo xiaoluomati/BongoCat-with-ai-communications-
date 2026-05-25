@@ -236,7 +236,7 @@ pub async fn trigger_profile_update(character_id: String, llm_manager: Arc<LLMMa
         profile_summary, new_chat_text);
 
     let messages = vec![ChatMessage::user(&prompt)];
-    let response = llm_manager.chat_with_params(messages, 0.7, 2000).await.map_err(|e| e.to_string())?;
+    let response = llm_manager.chat_with_params(messages, 0.7, 20000).await.map_err(|e| e.to_string())?;
 
     println!("[profile] LLM raw response: {}", &response.content);
 
