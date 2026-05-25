@@ -32,6 +32,7 @@ interface Profile {
 
 const loading = ref(false)
 const isRefreshing = ref(false)
+const expandedSections = ref<Set<string>>(new Set())
 const profileData = ref<Profile>({
   user_name: null,
   traits: [],
@@ -149,6 +150,14 @@ function getDatesText(dates: Record<string, string>) {
   return Object.entries(dates).map(([k, v]) => `${k}: ${v}`).join('， ')
 }
 
+function toggleSection(key: string) {
+  if (expandedSections.value.has(key)) {
+    expandedSections.value.delete(key)
+  } else {
+    expandedSections.value.add(key)
+  }
+}
+
 async function refreshProfile() {
   if (isRefreshing.value) return
   isRefreshing.value = true
@@ -206,38 +215,84 @@ onMounted(async () => {
 
     <!-- Preferences -->
     <ProListItem title="偏好">
-      <div class="text-sm mt-1">
-        {{ getPreferencesText(profileData.preferences) }}
+      <template #extra>
+        <span class="expand-hint" @click.stop="toggleSection('preferences')">
+          {{ expandedSections.has('preferences') ? '收起' : '展开' }}
+        </span>
+      </template>
+      <div v-if="expandedSections.has('preferences')" class="text-sm mt-1">
+        <div v-if="Object.keys(profileData.preferences || {}).length > 0" class="space-y-1">
+          <div v-for="(v, k) in profileData.preferences" :key="k" class="text-sm">
+            <span class="text-gray-500">{{ k }}:</span> {{ v }}
+          </div>
+        </div>
+        <span v-else class="text-gray-400">暂无</span>
+      </div>
+      <div v-else class="text-sm text-gray-400">
+        {{ Object.keys(profileData.preferences || {}).length > 0 ? `${Object.keys(profileData.preferences || {}).length} 项` : '暂无' }}
       </div>
     </ProListItem>
 
     <!-- Important Dates -->
     <ProListItem title="重要日期">
-      <div class="text-sm mt-1">
-        {{ getDatesText(profileData.important_dates) }}
+      <template #extra>
+        <span class="expand-hint" @click.stop="toggleSection('dates')">
+          {{ expandedSections.has('dates') ? '收起' : '展开' }}
+        </span>
+      </template>
+      <div v-if="expandedSections.has('dates')" class="text-sm mt-1">
+        <div v-if="Object.keys(profileData.important_dates || {}).length > 0" class="space-y-1">
+          <div v-for="(v, k) in profileData.important_dates" :key="k" class="text-sm">
+            <span class="text-gray-500">{{ k }}:</span> {{ v }}
+          </div>
+        </div>
+        <span v-else class="text-gray-400">暂无</span>
+      </div>
+      <div v-else class="text-sm text-gray-400">
+        {{ Object.keys(profileData.important_dates || {}).length > 0 ? `${Object.keys(profileData.important_dates || {}).length} 项` : '暂无' }}
       </div>
     </ProListItem>
 
     <!-- Recent Interactions (只读，由AI自动更新) -->
     <ProListItem title="最近互动">
-      <div v-if="profileData.recent_interactions?.length" class="space-y-2 mt-1">
-        <div v-for="(item, i) in profileData.recent_interactions.slice(0, 3)" :key="i" class="text-sm bg-gray-50 p-2 rounded">
-          <div class="text-gray-500">{{ item.date }} - {{ item.activity }}</div>
-          <div>{{ item.summary }}</div>
+      <template #extra>
+        <span class="expand-hint" @click.stop="toggleSection('interactions')">
+          {{ expandedSections.has('interactions') ? '收起' : '展开' }}
+        </span>
+      </template>
+      <div v-if="expandedSections.has('interactions')" class="space-y-2 mt-1">
+        <div v-if="profileData.recent_interactions?.length" class="space-y-2">
+          <div v-for="(item, i) in profileData.recent_interactions.slice(0, 5)" :key="i" class="text-sm bg-gray-50 p-2 rounded">
+            <div class="text-gray-500">{{ item.date }} - {{ item.activity }}</div>
+            <div>{{ item.summary }}</div>
+          </div>
         </div>
+        <span v-else class="text-gray-400">暂无</span>
       </div>
-      <span v-else class="text-gray-400">暂无</span>
+      <div v-else class="text-sm text-gray-400">
+        {{ profileData.recent_interactions?.length > 0 ? `${profileData.recent_interactions.length} 条` : '暂无' }}
+      </div>
     </ProListItem>
 
     <!-- Special Memories (只读，由AI自动更新) -->
     <ProListItem title="专属回忆">
-      <div v-if="profileData.special_memories?.length" class="space-y-2 mt-1">
-        <div v-for="(mem, i) in profileData.special_memories.slice(0, 3)" :key="i" class="text-sm bg-purple-50 p-2 rounded">
-          <div class="font-medium">{{ mem.title }}</div>
-          <div class="text-gray-600">{{ mem.description }}</div>
+      <template #extra>
+        <span class="expand-hint" @click.stop="toggleSection('memories')">
+          {{ expandedSections.has('memories') ? '收起' : '展开' }}
+        </span>
+      </template>
+      <div v-if="expandedSections.has('memories')" class="space-y-2 mt-1">
+        <div v-if="profileData.special_memories?.length" class="space-y-2">
+          <div v-for="(mem, i) in profileData.special_memories.slice(0, 5)" :key="i" class="text-sm bg-purple-50 p-2 rounded">
+            <div class="font-medium">{{ mem.title }}</div>
+            <div class="text-gray-600">{{ mem.description }}</div>
+          </div>
         </div>
+        <span v-else class="text-gray-400">暂无</span>
       </div>
-      <span v-else class="text-gray-400">暂无</span>
+      <div v-else class="text-sm text-gray-400">
+        {{ profileData.special_memories?.length > 0 ? `${profileData.special_memories.length} 条` : '暂无' }}
+      </div>
     </ProListItem>
   </ProList>
 
@@ -323,6 +378,17 @@ onMounted(async () => {
 .profile-actions {
   display: flex;
   gap: 8px;
+}
+
+.expand-hint {
+  color: #1890ff;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0 4px;
+}
+
+.expand-hint:hover {
+  text-decoration: underline;
 }
 
 .profile-name {
