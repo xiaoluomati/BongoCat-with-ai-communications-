@@ -213,87 +213,84 @@ onMounted(async () => {
       </div>
     </ProListItem>
 
-    <!-- Preferences -->
-    <ProListItem title="偏好">
-      <div class="pref-content">
-        <div v-if="expandedSections.has('preferences')">
-          <div v-if="Object.keys(profileData.preferences || {}).length > 0" class="space-y-1">
-            <div v-for="(v, k) in profileData.preferences" :key="k" class="text-sm">
-              <span class="text-gray-500">{{ k }}:</span> {{ v }}
-            </div>
-          </div>
-          <span v-else class="text-gray-400 text-sm">暂无</span>
-        </div>
-        <span v-else class="text-gray-400 text-sm">
+    <!-- Collapsible Sections -->
+    <!-- 偏好 -->
+    <div class="section-card">
+      <div class="section-header" @click="toggleSection('preferences')">
+        <span class="section-title">偏好</span>
+        <span class="section-count">
           {{ Object.keys(profileData.preferences || {}).length > 0 ? `${Object.keys(profileData.preferences || {}).length} 项` : '暂无' }}
         </span>
-        <span class="expand-hint" @click.stop="toggleSection('preferences')">
-          {{ expandedSections.has('preferences') ? '收起' : '展开' }}
-        </span>
+        <span class="expand-icon">{{ expandedSections.has('preferences') ? '▼' : '▶' }}</span>
       </div>
-    </ProListItem>
-
-    <!-- Important Dates -->
-    <ProListItem title="重要日期">
-      <div class="pref-content">
-        <div v-if="expandedSections.has('dates')">
-          <div v-if="Object.keys(profileData.important_dates || {}).length > 0" class="space-y-1">
-            <div v-for="(v, k) in profileData.important_dates" :key="k" class="text-sm">
-              <span class="text-gray-500">{{ k }}:</span> {{ v }}
-            </div>
+      <div v-if="expandedSections.has('preferences')" class="section-content">
+        <div v-if="Object.keys(profileData.preferences || {}).length > 0" class="space-y-1 px-3 py-2">
+          <div v-for="(v, k) in profileData.preferences" :key="k" class="text-sm">
+            <span class="text-gray-500">{{ k }}:</span> {{ v }}
           </div>
-          <span v-else class="text-gray-400 text-sm">暂无</span>
         </div>
-        <span v-else class="text-gray-400 text-sm">
+        <div v-else class="empty-text px-3 py-2">暂无</div>
+      </div>
+    </div>
+
+    <!-- 重要日期 -->
+    <div class="section-card">
+      <div class="section-header" @click="toggleSection('dates')">
+        <span class="section-title">重要日期</span>
+        <span class="section-count">
           {{ Object.keys(profileData.important_dates || {}).length > 0 ? `${Object.keys(profileData.important_dates || {}).length} 项` : '暂无' }}
         </span>
-        <span class="expand-hint" @click.stop="toggleSection('dates')">
-          {{ expandedSections.has('dates') ? '收起' : '展开' }}
-        </span>
+        <span class="expand-icon">{{ expandedSections.has('dates') ? '▼' : '▶' }}</span>
       </div>
-    </ProListItem>
-
-    <!-- Recent Interactions (只读，由AI自动更新) -->
-    <ProListItem title="最近互动">
-      <div class="pref-content">
-        <div v-if="expandedSections.has('interactions')">
-          <div v-if="profileData.recent_interactions?.length" class="space-y-2">
-            <div v-for="(item, i) in profileData.recent_interactions.slice(0, 5)" :key="i" class="text-sm bg-gray-50 p-2 rounded">
-              <div class="text-gray-500">{{ item.date }} - {{ item.activity }}</div>
-              <div>{{ item.summary }}</div>
-            </div>
+      <div v-if="expandedSections.has('dates')" class="section-content">
+        <div v-if="Object.keys(profileData.important_dates || {}).length > 0" class="space-y-1 px-3 py-2">
+          <div v-for="(v, k) in profileData.important_dates" :key="k" class="text-sm">
+            <span class="text-gray-500">{{ k }}:</span> {{ v }}
           </div>
-          <span v-else class="text-gray-400 text-sm">暂无</span>
         </div>
-        <span v-else class="text-gray-400 text-sm">
+        <div v-else class="empty-text px-3 py-2">暂无</div>
+      </div>
+    </div>
+
+    <!-- 最近互动 -->
+    <div class="section-card">
+      <div class="section-header" @click="toggleSection('interactions')">
+        <span class="section-title">最近互动</span>
+        <span class="section-count">
           {{ profileData.recent_interactions?.length > 0 ? `${profileData.recent_interactions.length} 条` : '暂无' }}
         </span>
-        <span class="expand-hint" @click.stop="toggleSection('interactions')">
-          {{ expandedSections.has('interactions') ? '收起' : '展开' }}
-        </span>
+        <span class="expand-icon">{{ expandedSections.has('interactions') ? '▼' : '▶' }}</span>
       </div>
-    </ProListItem>
-
-    <!-- Special Memories (只读，由AI自动更新) -->
-    <ProListItem title="专属回忆">
-      <div class="pref-content">
-        <div v-if="expandedSections.has('memories')">
-          <div v-if="profileData.special_memories?.length" class="space-y-2">
-            <div v-for="(mem, i) in profileData.special_memories.slice(0, 5)" :key="i" class="text-sm bg-purple-50 p-2 rounded">
-              <div class="font-medium">{{ mem.title }}</div>
-              <div class="text-gray-600">{{ mem.description }}</div>
-            </div>
+      <div v-if="expandedSections.has('interactions')" class="section-content">
+        <div v-if="profileData.recent_interactions?.length" class="space-y-2 px-3 py-2">
+          <div v-for="(item, i) in profileData.recent_interactions.slice(0, 5)" :key="i" class="text-sm bg-gray-50 p-2 rounded">
+            <div class="text-gray-500">{{ item.date }} - {{ item.activity }}</div>
+            <div>{{ item.summary }}</div>
           </div>
-          <span v-else class="text-gray-400 text-sm">暂无</span>
         </div>
-        <span v-else class="text-gray-400 text-sm">
+        <div v-else class="empty-text px-3 py-2">暂无</div>
+      </div>
+    </div>
+
+    <!-- 专属回忆 -->
+    <div class="section-card">
+      <div class="section-header" @click="toggleSection('memories')">
+        <span class="section-title">专属回忆</span>
+        <span class="section-count">
           {{ profileData.special_memories?.length > 0 ? `${profileData.special_memories.length} 条` : '暂无' }}
         </span>
-        <span class="expand-hint" @click.stop="toggleSection('memories')">
-          {{ expandedSections.has('memories') ? '收起' : '展开' }}
-        </span>
+        <span class="expand-icon">{{ expandedSections.has('memories') ? '▼' : '▶' }}</span>
       </div>
-    </ProListItem>
+      <div v-if="expandedSections.has('memories')" class="section-content">
+        <div v-if="profileData.special_memories?.length" class="space-y-2 px-3 py-2">
+          <div v-for="(mem, i) in profileData.special_memories.slice(0, 5)" :key="i" class="text-sm bg-purple-50 p-2 rounded">
+            <div class="font-medium">{{ mem.title }}</div>
+            <div class="text-gray-600">{{ mem.description }}</div>
+          </div>
+        </div>
+        <div v-else class="empty-text px-3 py-2">暂无</div>
+      </div>
+    </div>
   </ProList>
 
   <!-- Edit Modal -->
@@ -380,23 +377,48 @@ onMounted(async () => {
   gap: 8px;
 }
 
-.expand-hint {
-  color: #1890ff;
-  cursor: pointer;
-  font-size: 12px;
-  padding: 0 4px;
-  white-space: nowrap;
+.section-card {
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #e8e8e8;
+  overflow: hidden;
+  margin-bottom: 8px;
 }
 
-.expand-hint:hover {
-  text-decoration: underline;
-}
-
-.pref-content {
+.section-header {
   display: flex;
   align-items: center;
-  gap: 4px;
-  width: 100%;
+  padding: 12px 16px;
+  background: #fafafa;
+  cursor: pointer;
+  user-select: none;
+}
+
+.section-title {
+  font-weight: bold;
+  font-size: 14px;
+  color: #333;
+}
+
+.section-count {
+  margin-left: auto;
+  margin-right: 8px;
+  font-size: 12px;
+  color: #999;
+}
+
+.expand-icon {
+  font-size: 10px;
+  color: #999;
+}
+
+.section-content {
+  background: white;
+}
+
+.empty-text {
+  font-size: 13px;
+  color: #999;
 }
 
 .profile-name {
