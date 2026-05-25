@@ -24,6 +24,24 @@ interface MemoryInfo {
   monthly_summaries: number
 }
 
+interface WeeklySummary {
+  week: string
+  date_range: string
+  keywords: string[]
+  emotion_arc: string[]
+  summary: string
+  important_events: string[]
+  chat_count: number
+}
+
+interface MonthlySummary {
+  month: string
+  emotion_distribution: Record<string, number>
+  topics: string[]
+  relationship_growth: string
+  milestones: string[]
+}
+
 const configStore = useConfigStore()
 const loading = ref(false)
 const userName = ref('我')
@@ -32,7 +50,9 @@ const todayChats = ref<DayChat[]>([])
 const weekChats = ref<DayChat[]>([])
 const monthChats = ref<DayChat[]>([])
 const allChats = ref<DayChat[]>([])
-const expandedSections = ref<Set<string>>(new Set(['today']))
+const weeklySummaries = ref<WeeklySummary[]>([])
+const monthlySummaries = ref<MonthlySummary[]>([])
+const expandedSections = ref<Set<string>>(new Set(['today', 'weekly', 'monthly']))
 const selectedChat = ref<{ date: string; messages: ChatMessage[] } | null>(null)
 
 async function loadAll() {
@@ -71,6 +91,13 @@ onMounted(async () => {
     userName.value = '我'
   }
   memoryInfo.value = await invoke<MemoryInfo>('get_character_memory_info', { characterId: configStore.currentCharacterId })
+  // Load weekly and monthly summaries
+  try {
+    weeklySummaries.value = await invoke<WeeklySummary[]>('get_weekly_summaries', { characterId: configStore.currentCharacterId })
+    monthlySummaries.value = await invoke<MonthlySummary[]>('get_monthly_summaries', { characterId: configStore.currentCharacterId })
+  } catch (err) {
+    console.error('Failed to load summaries:', err)
+  }
   await loadAll()
 })
 
@@ -197,13 +224,64 @@ function getDateLabel(chat: DayChat): string {
           <div class="stat-value">{{ memoryInfo.chat_days }}</div>
           <div class="stat-label">对话天数</div>
         </div>
-        <div class="stat-card">
+        <div class="stat-card clickable" @click="toggleSection('weekly')">
           <div class="stat-value">{{ memoryInfo.weekly_summaries }}</div>
-          <div class="stat-label">周总结</div>
+          <div class="stat-label">周总结 ↙</div>
         </div>
-        <div class="stat-card">
+        <div class="stat-card clickable" @click="toggleSection('monthly')">
           <div class="stat-value">{{ memoryInfo.monthly_summaries }}</div>
-          <div class="stat-label">月总结</div>
+          <div class="stat-label">月总结 ↙</div>
+        </div>
+      </div>
+
+      <!-- 周总结详情 -->
+      <div class="section-card" style="margin-bottom: 12px;">
+        <div class="section-header" @click="toggleSection('weekly')">
+          <span class="section-title">📝 周总结详情</span>
+          <span class="section-count">{{ weeklySummaries.length }} 篇</span>
+          <span class="expand-icon">{{ expandedSections.has('weekly') ? '▼' : '▶' }}</span>
+        </div>
+        <div v-if="expandedSections.has('weekly')" class="section-content">
+          <div v-if="weeklySummaries.length === 0" class="empty-text">暂无周总结</div>
+          <div v-for="ws in weeklySummaries" :key="ws.week" class="summary-card">
+            <div class="summary-header">
+              <span class="summary-title">{{ ws.week }}</span>
+              <span class="summary-sub">{{ ws.date_range }}</span>
+            </div>
+            <div class="summary-content">{{ ws.summary }}</div>
+            <div v-if="ws.keywords.length > 0" class="summary-tags">
+              <span v-for="kw in ws.keywords" :key="kw" class="tag">{{ kw }}</span>
+            </div>
+            <div v-if="ws.important_events.length > 0" class="summary-events">
+              <div class="events-label">重要事件：</div>
+              <div v-for="ev in ws.important_events" :key="ev" class="event-item">• {{ ev }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 月总结详情 -->
+      <div class="section-card" style="margin-bottom: 12px;">
+        <div class="section-header" @click="toggleSection('monthly')">
+          <span class="section-title">📊 月总结详情</span>
+          <span class="section-count">{{ monthlySummaries.length }} 篇</span>
+          <span class="expand-icon">{{ expandedSections.has('monthly') ? '▼' : '▶' }}</span>
+        </div>
+        <div v-if="expandedSections.has('monthly')" class="section-content">
+          <div v-if="monthlySummaries.length === 0" class="empty-text">暂无月总结</div>
+          <div v-for="ms in monthlySummaries" :key="ms.month" class="summary-card">
+            <div class="summary-header">
+              <span class="summary-title">{{ ms.month }}</span>
+            </div>
+            <div v-if="ms.topics.length > 0" class="summary-tags">
+              <span v-for="topic in ms.topics" :key="topic" class="tag">{{ topic }}</span>
+            </div>
+            <div v-if="ms.relationship_growth" class="summary-content">{{ ms.relationship_growth }}</div>
+            <div v-if="ms.milestones.length > 0" class="summary-events">
+              <div class="events-label">里程碑：</div>
+              <div v-for="m in ms.milestones" :key="m" class="event-item">• {{ m }}</div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -395,6 +473,15 @@ function getDateLabel(chat: DayChat): string {
   font-size: 24px;
   font-weight: bold;
   color: #333;
+}
+
+.stat-card.clickable {
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.stat-card.clickable:hover {
+  background: #e8e8e8;
 }
 
 .stat-label {
@@ -600,5 +687,71 @@ function getDateLabel(chat: DayChat): string {
 
 .clear-dropdown-item:last-child {
   color: #ff4d4f;
+}
+
+.summary-card {
+  padding: 12px 16px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.summary-card:last-child {
+  border-bottom: none;
+}
+
+.summary-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.summary-title {
+  font-weight: bold;
+  font-size: 14px;
+  color: #333;
+}
+
+.summary-sub {
+  font-size: 12px;
+  color: #999;
+}
+
+.summary-content {
+  font-size: 13px;
+  color: #555;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  margin-bottom: 8px;
+}
+
+.summary-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.tag {
+  background: #e6f7ff;
+  color: #1890ff;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 12px;
+}
+
+.summary-events {
+  margin-top: 6px;
+}
+
+.events-label {
+  font-size: 12px;
+  color: #999;
+  margin-bottom: 4px;
+}
+
+.event-item {
+  font-size: 13px;
+  color: #555;
+  padding-left: 4px;
 }
 </style>
