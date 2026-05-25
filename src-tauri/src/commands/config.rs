@@ -96,6 +96,7 @@ pub struct TTSConfig {
     pub base_url: Option<String>,
     pub default_voice_id: String,
     pub volume: i32,
+    #[serde(default = "default_speed")]
     pub speed: f32,
     #[serde(default)]
     pub voices: HashMap<String, VoiceConfig>,
@@ -116,6 +117,8 @@ pub struct TTSConfig {
     #[serde(default = "default_emo_weight")]
     pub emo_weight: f32,
 }
+
+fn default_speed() -> f32 { 1.0 }
 
 fn default_emo_weight() -> f32 {
     0.8
