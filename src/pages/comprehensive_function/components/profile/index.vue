@@ -26,7 +26,7 @@ interface Profile {
   important_dates: Record<string, string>
   recent_interactions: Interaction[]
   special_memories: SpecialMemory[]
-  conversation_count: number
+  last_update_conversation_count: number
   last_updated: string
 }
 
@@ -40,7 +40,7 @@ const profileData = ref<Profile>({
   important_dates: {},
   recent_interactions: [],
   special_memories: [],
-  conversation_count: 0,
+  last_update_conversation_count: 0,
   last_updated: '',
 })
 
@@ -66,7 +66,7 @@ async function loadProfile() {
       important_dates: data.important_dates || {},
       recent_interactions: data.recent_interactions || [],
       special_memories: data.special_memories || [],
-      conversation_count: data.conversation_count || 0,
+      last_update_conversation_count: data.last_update_conversation_count || 0,
       last_updated: data.last_updated || '',
     }
   } catch (e) {
@@ -202,7 +202,7 @@ onMounted(async () => {
   <ProList :loading="loading">
     <!-- Basic Info -->
     <ProListItem title="用户名" :description="profileData.user_name || '未设置'" />
-    <ProListItem title="对话轮数" :description="String(profileData.conversation_count || 0)" />
+    <ProListItem title="已整理轮数" :description="String(profileData.last_update_conversation_count || 0)" />
     <ProListItem title="上次更新" :description="fmtDate(profileData.last_updated)" />
 
     <!-- Traits -->

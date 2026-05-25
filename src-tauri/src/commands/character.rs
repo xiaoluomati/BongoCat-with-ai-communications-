@@ -73,8 +73,7 @@ pub struct UserProfile {
     pub important_dates: HashMap<String, String>,
     pub recent_interactions: Vec<Interaction>,      // 最近互动
     pub special_memories: Vec<SpecialMemory>,       // 专属回忆
-    pub conversation_count: u32,                    // 累计对话轮数
-    pub last_update_conversation_count: u32,        // 上次更新画像时的对话轮数
+    pub last_update_conversation_count: u32,       // 上次更新画像时的对话轮数
     pub last_updated: String,
 }
 
@@ -129,47 +128,6 @@ pub fn save_user_profile(character_id: String, profile: UserProfile) -> Result<(
     let content = serde_json::to_string_pretty(&profile).map_err(|e| e.to_string())?;
     fs::write(&profile_path, content).map_err(|e| e.to_string())?;
     Ok(())
-}
-
-/// 对话计数+1
-#[tauri::command]
-pub fn increment_conversation_count(character_id: String) -> Result<u32, String> {
-    ensure_character_dirs(&character_id)?;
-    let profile_path = get_profile_dir(&character_id).join("user_profile.json");
-
-    let mut profile = if profile_path.exists() {
-        let content = fs::read_to_string(&profile_path).map_err(|e| e.to_string())?;
-        serde_json::from_str::<UserProfile>(&content).unwrap_or_default()
-    } else {
-        UserProfile::default()
-    };
-
-    profile.conversation_count += 1;
-    let count = profile.conversation_count;
-
-    let content = serde_json::to_string_pretty(&profile).map_err(|e| e.to_string())?;
-    fs::write(&profile_path, content).map_err(|e| e.to_string())?;
-
-    Ok(count)
-}
-
-/// 更新对话计数并检查是否需要更新画像
-#[tauri::command]
-pub fn check_and_update_profile(character_id: String, conversation_count: u32, force_update: bool) -> Result<bool, String> {
-    let mut profile = get_user_profile(character_id.clone())?;
-    let old_count = profile.conversation_count;
-    profile.conversation_count = conversation_count;
-    
-    // 检查是否需要更新: 强制更新 或 满50轮
-    let needs_update = force_update || (conversation_count > 0 && (conversation_count - old_count) >= 50);
-    
-    if needs_update {
-        profile.last_updated = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
-        save_user_profile(character_id, profile)?;
-        return Ok(true);
-    }
-    
-    Ok(false)
 }
 
 /// 手动触发用户画像更新 (异步)
@@ -337,7 +295,6 @@ pub async fn trigger_profile_update(character_id: String, llm_manager: Arc<LLMMa
         }
 
         profile.last_updated = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
-        profile.conversation_count = actual_count;
         profile.last_update_conversation_count = actual_count;
 
         save_user_profile(character_id, profile.clone())?;

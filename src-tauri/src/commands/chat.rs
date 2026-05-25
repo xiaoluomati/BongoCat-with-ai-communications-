@@ -103,7 +103,7 @@ pub async fn send_message(
     state.messages.push(ChatMessage::assistant(&response.content));
     drop(state);
 
-    // Increment conversation count and check auto-update threshold
+    // Compute actual count and check auto-update threshold
     let character_id = match crate::commands::config::load_config() {
         Ok(config) => config.characters.current,
         Err(_) => {
@@ -112,20 +112,19 @@ pub async fn send_message(
         }
     };
 
-    let new_count = match crate::commands::character::increment_conversation_count(character_id.clone()) {
-        Ok(c) => c,
-        Err(e) => {
-            println!("[chat] failed to increment conversation count: {}", e);
-            return Err(e);
-        }
-    };
+    let dates = crate::commands::memory::get_chat_dates(character_id.clone()).unwrap_or_default();
+    let actual_count: u32 = dates.iter().map(|date| {
+        crate::commands::memory::get_chat_by_date(character_id.clone(), date.clone())
+            .map(|c| c.messages.iter().filter(|m| m.role == "user").count() as u32)
+            .unwrap_or(0)
+    }).sum();
 
     let profile = match crate::commands::character::get_user_profile(character_id.clone()) {
         Ok(p) => p,
         Err(_) => return Ok(response.into()),
     };
 
-    let new_messages_since_update = new_count.saturating_sub(profile.last_update_conversation_count);
+    let new_messages_since_update = actual_count.saturating_sub(profile.last_update_conversation_count);
 
     // Auto-update user profile when 50 new messages accumulated
     if new_messages_since_update >= 50 {
@@ -194,26 +193,25 @@ pub async fn send_message_stream(
     state.messages.push(assistant_message);
     drop(state);
 
-    // Increment conversation count and check auto-update threshold
+    // Compute actual count and check auto-update threshold
     let character_id = match crate::commands::config::load_config() {
         Ok(config) => config.characters.current,
         Err(_) => return Err("failed to load config".to_string()),
     };
 
-    let new_count = match crate::commands::character::increment_conversation_count(character_id.clone()) {
-        Ok(c) => c,
-        Err(e) => {
-            println!("[chat] failed to increment conversation count: {}", e);
-            return Err(e);
-        }
-    };
+    let dates = crate::commands::memory::get_chat_dates(character_id.clone()).unwrap_or_default();
+    let actual_count: u32 = dates.iter().map(|date| {
+        crate::commands::memory::get_chat_by_date(character_id.clone(), date.clone())
+            .map(|c| c.messages.iter().filter(|m| m.role == "user").count() as u32)
+            .unwrap_or(0)
+    }).sum();
 
     let profile = match crate::commands::character::get_user_profile(character_id.clone()) {
         Ok(p) => p,
         Err(_) => return Ok(response.into()),
     };
 
-    let new_messages_since_update = new_count.saturating_sub(profile.last_update_conversation_count);
+    let new_messages_since_update = actual_count.saturating_sub(profile.last_update_conversation_count);
 
     // Auto-update user profile when 50 new messages accumulated
     if new_messages_since_update >= 50 {
