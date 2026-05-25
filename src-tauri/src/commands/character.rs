@@ -178,7 +178,7 @@ pub async fn trigger_profile_update(character_id: String, llm_manager: Arc<LLMMa
 
     let new_chat_text: String = recent_user_messages.iter()
         .map(|(ts, m)| {
-            let datetime = chrono::DateTime::from_timestamp(*ts, 0)
+            let datetime = chrono::DateTime::from_timestamp_millis(*ts)
                 .map(|dt| dt.format("%Y-%m-%d %H:%M").to_string())
                 .unwrap_or_else(|| "未知时间".to_string());
             let role_label = match m.role.as_str() {
