@@ -141,11 +141,16 @@ impl LLMManager {
 
     /// Send chat request (non-streaming)
     pub async fn chat(&self, messages: Vec<ChatMessage>) -> Result<ChatResponse, LLMError> {
+        self.chat_with_params(messages, self.config.temperature, self.config.max_tokens).await
+    }
+
+    /// Send chat request with custom params (for profile generation that needs more tokens)
+    pub async fn chat_with_params(&self, messages: Vec<ChatMessage>, temperature: f32, max_tokens: u32) -> Result<ChatResponse, LLMError> {
         let request = ChatRequest {
             model: self.config.model.clone(),
             messages,
-            temperature: self.config.temperature,
-            max_tokens: self.config.max_tokens,
+            temperature,
+            max_tokens,
         };
 
         match self.config.provider {
