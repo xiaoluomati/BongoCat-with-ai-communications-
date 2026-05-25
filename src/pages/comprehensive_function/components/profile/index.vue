@@ -31,6 +31,7 @@ interface Profile {
 }
 
 const loading = ref(false)
+const isRefreshing = ref(false)
 const profileData = ref<Profile>({
   user_name: null,
   traits: [],
@@ -148,6 +149,21 @@ function getDatesText(dates: Record<string, string>) {
   return Object.entries(dates).map(([k, v]) => `${k}: ${v}`).join('， ')
 }
 
+async function refreshProfile() {
+  if (isRefreshing.value) return
+  isRefreshing.value = true
+  try {
+    await invoke('trigger_profile_update_command', { characterId: configStore.currentCharacterId || 'cat' })
+    message.success('画像已刷新')
+    await loadProfile()
+  } catch (e) {
+    console.error(e)
+    message.error('刷新失败')
+  } finally {
+    isRefreshing.value = false
+  }
+}
+
 onMounted(async () => {
   await configStore.init()
   console.log('[profile] currentCharacterId:', configStore.currentCharacterId, 'initialized:', configStore.initialized)
@@ -164,7 +180,10 @@ onMounted(async () => {
       <span class="profile-name">{{ currentCharacterName }}</span>
       <span class="profile-subtitle">用户画像</span>
     </div>
-    <Button type="primary" size="small" @click="openEdit">编辑</Button>
+    <div class="profile-actions">
+      <Button size="small" :loading="isRefreshing" @click="refreshProfile">刷新画像</Button>
+      <Button type="primary" size="small" @click="openEdit">编辑</Button>
+    </div>
   </div>
 
   <ProList :loading="loading">
@@ -295,6 +314,11 @@ onMounted(async () => {
   display: flex;
   align-items: baseline;
   gap: 6px;
+}
+
+.profile-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .profile-name {
