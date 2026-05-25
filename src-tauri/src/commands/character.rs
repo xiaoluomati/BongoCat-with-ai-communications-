@@ -39,7 +39,8 @@ pub struct UserProfile {
     pub important_dates: HashMap<String, String>,
     pub recent_interactions: Vec<Interaction>,      // 最近互动
     pub special_memories: Vec<SpecialMemory>,       // 专属回忆
-    pub conversation_count: u32,
+    pub conversation_count: u32,                    // 累计对话轮数
+    pub last_update_conversation_count: u32,        // 上次更新画像时的对话轮数
     pub last_updated: String,
 }
 
@@ -96,6 +97,28 @@ pub fn save_user_profile(character_id: String, profile: UserProfile) -> Result<(
     Ok(())
 }
 
+/// 对话计数+1
+#[tauri::command]
+pub fn increment_conversation_count(character_id: String) -> Result<u32, String> {
+    ensure_character_dirs(&character_id)?;
+    let profile_path = get_profile_dir(&character_id).join("user_profile.json");
+
+    let mut profile = if profile_path.exists() {
+        let content = fs::read_to_string(&profile_path).map_err(|e| e.to_string())?;
+        serde_json::from_str::<UserProfile>(&content).unwrap_or_default()
+    } else {
+        UserProfile::default()
+    };
+
+    profile.conversation_count += 1;
+    let count = profile.conversation_count;
+
+    let content = serde_json::to_string_pretty(&profile).map_err(|e| e.to_string())?;
+    fs::write(&profile_path, content).map_err(|e| e.to_string())?;
+
+    Ok(count)
+}
+
 /// 更新对话计数并检查是否需要更新画像
 #[tauri::command]
 pub fn check_and_update_profile(character_id: String, conversation_count: u32, force_update: bool) -> Result<bool, String> {
@@ -120,81 +143,119 @@ pub fn check_and_update_profile(character_id: String, conversation_count: u32, f
 pub async fn trigger_profile_update(character_id: String, llm_manager: Arc<LLMManager>) -> Result<UserProfile, String> {
     use crate::llm::ChatMessage;
 
-    // Get all chat dates and collect messages from recent history
+    // Get current profile
+    let current_profile = get_user_profile(character_id.clone())?;
+
+    // Collect all messages from all dates, sorted by timestamp
     let dates = crate::commands::memory::get_chat_dates(character_id.clone())
         .unwrap_or_default();
 
-    let mut all_messages: Vec<ChatMessage> = Vec::new();
-    for date in dates.iter().take(30) {
+    let mut all_messages: Vec<(i64, ChatMessage)> = Vec::new();
+    for date in dates.iter() {
         if let Ok(day_chat) = crate::commands::memory::get_chat_by_date(character_id.clone(), date.clone()) {
             for msg in day_chat.messages {
-                all_messages.push(ChatMessage {
+                all_messages.push((msg.timestamp, ChatMessage {
                     role: msg.role,
                     content: msg.content,
-                });
+                }));
             }
         }
     }
 
-    // Take most recent 100 messages for analysis
-    let messages: Vec<_> = all_messages.into_iter().rev().take(100).collect();
+    // Sort by timestamp ascending
+    all_messages.sort_by_key(|(ts, _)| *ts);
 
-    if messages.is_empty() {
+    // Take most recent 50 user messages
+    let recent_user_messages: Vec<_> = all_messages
+        .into_iter()
+        .filter(|(_, m)| m.role == "user")
+        .rev()
+        .take(50)
+        .collect();
+
+    if recent_user_messages.is_empty() {
         return Err("暂无对话数据".to_string());
     }
-    
-    let chat_text: String = messages.iter()
-        .map(|m| format!("{}: {}", m.role, m.content))
+
+    let new_chat_text: String = recent_user_messages.iter()
+        .map(|(_, m)| format!("{}: {}", m.role, m.content))
         .collect::<Vec<_>>()
         .join("\n");
-    
-    let prompt = format!(r#"请从以下对话中分析用户的特点，生成用户画像。
 
-要求：
-1. 提取用户名称（如果有）
-2. 分析用户性格特点
-3. 提取用户偏好（如音乐、电影、游戏、饮食习惯等）
-4. 标记重要日期（如生日、纪念日）
-5. 分析最近互动（用户和AI一起做了什么有趣的事）
-6. 提取专属回忆（用户分享的重要经历或特别时刻）
+    // Build profile summary for LLM
+    let profile_summary = format!(
+        r#"旧用户画像：
+- 用户名: {}
+- 性格特点: {}
+- 偏好: {}
+- 重要日期: {}
+- 最近互动: {}
+- 专属回忆: {}"#,
+        current_profile.user_name.clone().unwrap_or_else(|| "未知".to_string()),
+        if current_profile.traits.is_empty() { "暂无".to_string() } else { current_profile.traits.join(", ") },
+        if current_profile.preferences.is_empty() { "暂无".to_string() } else {
+            current_profile.preferences.iter().map(|(k, v)| format!("{}: {}", k, v)).collect::<Vec<_>>().join(", ")
+        },
+        if current_profile.important_dates.is_empty() { "暂无".to_string() } else {
+            current_profile.important_dates.iter().map(|(k, v)| format!("{}: {}", k, v)).collect::<Vec<_>>().join(", ")
+        },
+        if current_profile.recent_interactions.is_empty() { "暂无".to_string() } else {
+            current_profile.recent_interactions.iter().map(|i| format!("{}: {} - {}", i.date, i.activity, i.summary)).collect::<Vec<_>>().join("; ")
+        },
+        if current_profile.special_memories.is_empty() { "暂无".to_string() } else {
+            current_profile.special_memories.iter().map(|m| format!("{}: {}", m.title, m.description)).collect::<Vec<_>>().join("; ")
+        },
+    );
 
-## 最近对话
+    let prompt = format!(r#"请根据以下信息，更新用户画像。
+
+## 旧用户画像（已有信息，保留并合并）
 {}
 
-请按以下JSON格式输出：
-{{"user_name": "用户名或null", "traits": ["特点1", "特点2"], "preferences": {{"喜欢音乐": "古典音乐"}}, "important_dates": {{"生日": "06-15", "纪念日": "2024-01-01"}}, "recent_interactions": [{{"date": "2024-01-01", "activity": "一起听音乐", "summary": "用户分享了他喜欢的古典音乐"}}, ...], "special_memories": [{{"title": "第一次聊天", "description": "用户第一次打开应用和我们聊天", "date": "2024-01-01", "tags": ["回忆", "第一次"]}}, ...]}}"#, 
-        chat_text);
-    
+## 新对话（分析这些对话，对旧画像进行更新和补充）
+{}
+
+请根据新对话更新用户画像，要求：
+1. 保留旧画像中仍有价值的信息
+2. 分析新对话，提炼新的性格特点、偏好、重要日期、互动和回忆
+3. 如果旧信息与新对话矛盾，以新对话为准
+4. 如果没有新对话中的某个维度信息，则保留旧画像中的对应内容
+
+请按以下JSON格式输出（只需输出JSON，不要其他内容）：
+{{"user_name": "用户名或null", "traits": ["特点1", "特点2"], "preferences": {{"喜欢音乐": "古典音乐"}}, "important_dates": {{"生日": "06-15"}}, "recent_interactions": [{{"date": "2024-01-01", "activity": "一起听音乐", "summary": "用户分享了他喜欢的古典音乐"}}], "special_memories": [{{"title": "第一次聊天", "description": "用户第一次打开应用和我们聊天", "date": "2024-01-01", "tags": ["回忆"]}}]}}"#,
+        profile_summary, new_chat_text);
+
     let messages = vec![ChatMessage::user(&prompt)];
     let response = llm_manager.chat(messages).await.map_err(|e| e.to_string())?;
-    
-    // 解析响应
+
+    // Parse and update profile
     if let Ok(data) = serde_json::from_str::<serde_json::Value>(&response.content) {
-        let mut profile = get_user_profile(character_id.clone())?;
-        
+        let mut profile = current_profile;
+
         profile.user_name = data.get("user_name").and_then(|v| v.as_str()).map(String::from);
         profile.traits = data.get("traits")
             .and_then(|v| v.as_array())
             .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
             .unwrap_or_default();
-        
+
         if let Some(obj) = data.get("preferences").and_then(|v| v.as_object()) {
+            profile.preferences.clear();
             for (k, v) in obj {
                 if let Some(s) = v.as_str() {
                     profile.preferences.insert(k.clone(), s.to_string());
                 }
             }
         }
-        
+
         if let Some(obj) = data.get("important_dates").and_then(|v| v.as_object()) {
+            profile.important_dates.clear();
             for (k, v) in obj {
                 if let Some(s) = v.as_str() {
                     profile.important_dates.insert(k.clone(), s.to_string());
                 }
             }
         }
-        
-        // 解析最近互动
+
         if let Some(arr) = data.get("recent_interactions").and_then(|v| v.as_array()) {
             profile.recent_interactions = arr.iter()
                 .filter_map(|item| {
@@ -206,8 +267,7 @@ pub async fn trigger_profile_update(character_id: String, llm_manager: Arc<LLMMa
                 })
                 .collect();
         }
-        
-        // 解析专属回忆
+
         if let Some(arr) = data.get("special_memories").and_then(|v| v.as_array()) {
             profile.special_memories = arr.iter()
                 .filter_map(|item| {
@@ -223,13 +283,14 @@ pub async fn trigger_profile_update(character_id: String, llm_manager: Arc<LLMMa
                 })
                 .collect();
         }
-        
+
         profile.last_updated = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
-        
+        profile.last_update_conversation_count = profile.conversation_count;
+
         save_user_profile(character_id, profile.clone())?;
         return Ok(profile);
     }
-    
+
     Err("无法解析用户画像".to_string())
 }
 
@@ -239,6 +300,10 @@ pub async fn trigger_profile_update_command(
     character_id: String,
     llm_manager: State<'_, Arc<LLMManager>>,
 ) -> Result<UserProfile, String> {
+    let profile = get_user_profile(character_id.clone())?;
+    if profile.conversation_count == profile.last_update_conversation_count {
+        return Err("画像已是最新，无需更新".to_string());
+    }
     trigger_profile_update(character_id, llm_manager.inner().clone()).await
 }
 

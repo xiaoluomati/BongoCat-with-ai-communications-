@@ -101,31 +101,43 @@ pub async fn send_message(
     let mut state = chat_state.write().await;
     state.messages.push(user_message);
     state.messages.push(ChatMessage::assistant(&response.content));
-    
-    // Auto-update user profile
-    let msg_count = state.messages.len() / 2; // user + assistant = 1 pair
-    
-    // Note: For streaming mode, TTS is triggered by frontend via chunks
-    // This spawn is only for non-streaming mode when the full response is ready
-    
     drop(state);
-    
-    // Check if we should update profile (every 50 messages)
-    if msg_count > 0 && msg_count % 50 == 0 {
-        // Trigger profile update in background
+
+    // Increment conversation count and check auto-update threshold
+    let character_id = match crate::commands::config::load_config() {
+        Ok(config) => config.characters.current,
+        Err(_) => {
+            println!("[chat] failed to load config");
+            return Err("failed to load config".to_string());
+        }
+    };
+
+    let new_count = match crate::commands::character::increment_conversation_count(character_id.clone()) {
+        Ok(c) => c,
+        Err(e) => {
+            println!("[chat] failed to increment conversation count: {}", e);
+            return Err(e);
+        }
+    };
+
+    let profile = match crate::commands::character::get_user_profile(character_id.clone()) {
+        Ok(p) => p,
+        Err(_) => return Ok(response.into()),
+    };
+
+    let new_messages_since_update = new_count.saturating_sub(profile.last_update_conversation_count);
+
+    // Auto-update user profile when 50 new messages accumulated
+    if new_messages_since_update >= 50 {
         let llm_manager = llm_manager.inner().clone();
         tokio::spawn(async move {
-            let character_id = match crate::commands::config::load_config() {
-                Ok(config) => config.characters.current,
-                Err(_) => return,
-            };
             match crate::commands::character::trigger_profile_update(character_id, llm_manager).await {
-                Ok(_) => {}
-                Err(_) => {} // silently ignore errors
+                Ok(_) => println!("[chat] profile auto-updated"),
+                Err(e) => println!("[chat] profile auto-update failed: {}", e),
             }
         });
     }
-    
+
     println!("[chat] stream end, response_len={}", response.content.len());
     Ok(response.into())
 }
@@ -180,21 +192,36 @@ pub async fn send_message_stream(
     let assistant_message = ChatMessage::assistant(&response.content);
     let mut state = chat_state.write().await;
     state.messages.push(assistant_message);
-
-    // Auto-update user profile every 50 messages
-    let msg_count = state.messages.len() / 2;
     drop(state);
 
-    if msg_count > 0 && msg_count % 50 == 0 {
+    // Increment conversation count and check auto-update threshold
+    let character_id = match crate::commands::config::load_config() {
+        Ok(config) => config.characters.current,
+        Err(_) => return Err("failed to load config".to_string()),
+    };
+
+    let new_count = match crate::commands::character::increment_conversation_count(character_id.clone()) {
+        Ok(c) => c,
+        Err(e) => {
+            println!("[chat] failed to increment conversation count: {}", e);
+            return Err(e);
+        }
+    };
+
+    let profile = match crate::commands::character::get_user_profile(character_id.clone()) {
+        Ok(p) => p,
+        Err(_) => return Ok(response.into()),
+    };
+
+    let new_messages_since_update = new_count.saturating_sub(profile.last_update_conversation_count);
+
+    // Auto-update user profile when 50 new messages accumulated
+    if new_messages_since_update >= 50 {
         let llm_manager = llm_manager.inner().clone();
         tokio::spawn(async move {
-            let character_id = match crate::commands::config::load_config() {
-                Ok(config) => config.characters.current,
-                Err(_) => return,
-            };
             match crate::commands::character::trigger_profile_update(character_id, llm_manager).await {
-                Ok(_) => {}
-                Err(_) => {}
+                Ok(_) => println!("[chat] profile auto-updated"),
+                Err(e) => println!("[chat] profile auto-update failed: {}", e),
             }
         });
     }

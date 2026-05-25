@@ -156,9 +156,13 @@ async function refreshProfile() {
     await invoke('trigger_profile_update_command', { characterId: configStore.currentCharacterId || 'cat' })
     message.success('画像已刷新')
     await loadProfile()
-  } catch (e) {
-    console.error(e)
-    message.error('刷新失败')
+  } catch (e: any) {
+    if (e?.message?.includes('已是最新') || e === '画像已是最新，无需更新') {
+      message.info('画像已是最新，无需更新')
+    } else {
+      console.error(e)
+      message.error('刷新失败')
+    }
   } finally {
     isRefreshing.value = false
   }
