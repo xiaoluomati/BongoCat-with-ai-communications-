@@ -16,6 +16,40 @@ fn get_profile_dir(character_id: &str) -> PathBuf {
     get_data_dir().join("profile").join(character_id)
 }
 
+/// Try to extract JSON from LLM response that may contain extra text/markdown
+fn extract_json(text: &str) -> Option<serde_json::Value> {
+    // Try direct parse first
+    if let Ok(v) = serde_json::from_str::<serde_json::Value>(text) {
+        return Some(v);
+    }
+
+    // Try to extract from ```json ... ``` or ``` ... ``` blocks
+    let text_lower = text.to_lowercase();
+    if let Some(start) = text_lower.find("```json") {
+        let after_start = &text[start + 6..];
+        if let Some(end) = after_start.find("```") {
+            let json_str = &after_start[..end];
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(json_str.trim()) {
+                return Some(v);
+            }
+        }
+    }
+
+    // Try to find first { to last } in the response
+    if let Some(start) = text.find('{') {
+        if let Some(end) = text.rfind('}') {
+            if end > start {
+                let json_str = &text[start..=end];
+                if let Ok(v) = serde_json::from_str::<serde_json::Value>(json_str) {
+                    return Some(v);
+                }
+            }
+        }
+    }
+
+    None
+}
+
 #[allow(dead_code)]
 fn get_memory_base_dir() -> PathBuf {
     get_data_dir().join("memory")
@@ -229,7 +263,7 @@ pub async fn trigger_profile_update(character_id: String, llm_manager: Arc<LLMMa
     let response = llm_manager.chat(messages).await.map_err(|e| e.to_string())?;
 
     // Parse and update profile
-    if let Ok(data) = serde_json::from_str::<serde_json::Value>(&response.content) {
+    if let Some(data) = extract_json(&response.content) {
         let mut profile = current_profile;
 
         profile.user_name = data.get("user_name").and_then(|v| v.as_str()).map(String::from);
