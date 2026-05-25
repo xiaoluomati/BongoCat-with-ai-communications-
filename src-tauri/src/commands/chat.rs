@@ -180,7 +180,25 @@ pub async fn send_message_stream(
     let assistant_message = ChatMessage::assistant(&response.content);
     let mut state = chat_state.write().await;
     state.messages.push(assistant_message);
-    
+
+    // Auto-update user profile every 50 messages
+    let msg_count = state.messages.len() / 2;
+    drop(state);
+
+    if msg_count > 0 && msg_count % 50 == 0 {
+        let llm_manager = llm_manager.inner().clone();
+        tokio::spawn(async move {
+            let character_id = match crate::commands::config::load_config() {
+                Ok(config) => config.characters.current,
+                Err(_) => return,
+            };
+            match crate::commands::character::trigger_profile_update(character_id, llm_manager).await {
+                Ok(_) => {}
+                Err(_) => {}
+            }
+        });
+    }
+
     println!("[chat] stream end, response_len={}", response.content.len());
     Ok(response.into())
 }

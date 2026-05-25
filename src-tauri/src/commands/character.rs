@@ -1,12 +1,14 @@
 //! Character Enhancement - User Profile & Extended Commands
 
 use crate::commands::config::get_app_data_dir;
+use crate::llm::LLMManager;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 use chrono::Local;
+use tauri::State;
 
 fn get_data_dir() -> PathBuf { get_app_data_dir() }
 
@@ -114,8 +116,8 @@ pub fn check_and_update_profile(character_id: String, conversation_count: u32, f
 }
 
 /// 手动触发用户画像更新 (异步)
-// #[tauri::command]  // 移除 command 属性，作为内部函数使用
-pub async fn trigger_profile_update(character_id: String, llm_manager: Arc<crate::llm::LLMManager>) -> Result<UserProfile, String> {
+// Internal async function (not a command)
+pub async fn trigger_profile_update(character_id: String, llm_manager: Arc<LLMManager>) -> Result<UserProfile, String> {
     use crate::llm::ChatMessage;
     
     // 获取最近对话
@@ -217,6 +219,15 @@ pub async fn trigger_profile_update(character_id: String, llm_manager: Arc<crate
     }
     
     Err("无法解析用户画像".to_string())
+}
+
+/// 触发用户画像更新 (Tauri command wrapper)
+#[tauri::command]
+pub async fn trigger_profile_update_command(
+    character_id: String,
+    llm_manager: State<'_, Arc<LLMManager>>,
+) -> Result<UserProfile, String> {
+    trigger_profile_update(character_id, llm_manager.inner().clone()).await
 }
 
 /// 获取当前角色ID
