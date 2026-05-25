@@ -238,6 +238,8 @@ pub async fn trigger_profile_update(character_id: String, llm_manager: Arc<LLMMa
     let messages = vec![ChatMessage::user(&prompt)];
     let response = llm_manager.chat(messages).await.map_err(|e| e.to_string())?;
 
+    println!("[profile] LLM raw response: {}", &response.content);
+
     // Parse and update profile
     if let Some(data) = extract_json(&response.content) {
         let mut profile = current_profile;
