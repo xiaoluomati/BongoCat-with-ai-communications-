@@ -79,7 +79,7 @@ async function loadMoreHistory() {
   
   try {
     // 获取所有有聊天记录的日期
-    const allDates = await invoke<string[]>('get_chat_dates')
+    const allDates = await invoke<string[]>('get_chat_dates', { characterId: configStore.currentCharacterId })
     
     // 找出还没加载的日期
     const unloadedDates = allDates.filter(date => !loadedDates.value.includes(date))
@@ -98,7 +98,7 @@ async function loadMoreHistory() {
     const oldHeight = container?.scrollHeight || 0
     
     // 加载该日期的消息
-    const dayChat = await invoke<any>('get_chat_by_date', { date: oldestDate })
+    const dayChat = await invoke<any>('get_chat_by_date', { characterId: configStore.currentCharacterId, date: oldestDate })
     
     if (dayChat?.messages?.length > 0) {
       // 构建日期分隔消息

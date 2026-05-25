@@ -39,14 +39,14 @@ async function loadAll() {
   const charId = configStore.currentCharacterId
   loading.value = true
   try {
-    const dates = await invoke<string[]>('get_chat_dates', { character_id: charId })
+    const dates = await invoke<string[]>('get_chat_dates', { characterId: charId })
     const today = new Date().toISOString().split('T')[0]
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
     const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
     const all: DayChat[] = []
     for (const date of dates) {
-      const chat = await invoke<DayChat>('get_chat_by_date', { character_id: charId, date })
+      const chat = await invoke<DayChat>('get_chat_by_date', { characterId: charId, date })
       all.push(chat)
     }
 
@@ -65,12 +65,12 @@ onMounted(async () => {
   await configStore.init()
   // Load user profile for display name
   try {
-    const profile = await invoke<any>('get_user_profile', { character_id: configStore.currentCharacterId })
+    const profile = await invoke<any>('get_user_profile', { characterId: configStore.currentCharacterId })
     userName.value = profile?.user_name || '我'
   } catch {
     userName.value = '我'
   }
-  memoryInfo.value = await invoke<MemoryInfo>('get_character_memory_info', { character_id: configStore.currentCharacterId })
+  memoryInfo.value = await invoke<MemoryInfo>('get_character_memory_info', { characterId: configStore.currentCharacterId })
   await loadAll()
 })
 
@@ -83,7 +83,7 @@ async function loadChatForDate(date: string) {
   loading.value = true
   try {
     selectedChat.value = await invoke<DayChat>('get_chat_by_date', {
-      character_id: configStore.currentCharacterId,
+      characterId: configStore.currentCharacterId,
       date,
     })
   } catch (err) {
@@ -113,7 +113,7 @@ function formatTime(timestamp: number): string {
 async function handleExport() {
   try {
     const markdown = await invoke<string>('export_chats_markdown', {
-      character_id: configStore.currentCharacterId,
+      characterId: configStore.currentCharacterId,
     })
     const blob = new Blob([markdown], { type: 'text/markdown' })
     const url = URL.createObjectURL(blob)
@@ -145,17 +145,17 @@ function handleClearAction(range: string) {
     async onOk() {
       try {
         if (range === 'all') {
-          await invoke('clear_all_chats', { character_id: configStore.currentCharacterId })
+          await invoke('clear_all_chats', { characterId: configStore.currentCharacterId })
         } else {
           await invoke('clear_chat_by_range', {
-            character_id: configStore.currentCharacterId,
+            characterId: configStore.currentCharacterId,
             range,
           })
         }
         message.success('记忆已清空')
         selectedChat.value = null
         memoryInfo.value = await invoke<MemoryInfo>('get_character_memory_info', {
-          character_id: configStore.currentCharacterId,
+          characterId: configStore.currentCharacterId,
         })
         await loadAll()
       } catch (err) {

@@ -56,7 +56,7 @@ export const useChatStore = defineStore('chat', () => {
   async function saveMessageToMemory(message: ChatMessage) {
     try {
       await invoke('save_chat_message', {
-        character_id: configStore.currentCharacterId,
+        characterId: configStore.currentCharacterId,
         message: {
           id: message.id,
           role: message.role,
@@ -313,7 +313,7 @@ export const useChatStore = defineStore('chat', () => {
   // Load today's chat from file
   async function loadHistory() {
     try {
-      const todayChat = await invoke<any>('get_today_chat', { character_id: configStore.currentCharacterId })
+      const todayChat = await invoke<any>('get_today_chat', { characterId: configStore.currentCharacterId })
       if (todayChat && todayChat.messages) {
         messages.value = todayChat.messages.map((msg: any) => ({
           id: msg.id || `msg_${msg.timestamp}`,
@@ -353,7 +353,7 @@ export const useChatStore = defineStore('chat', () => {
   // Export as markdown
   async function exportChatsMarkdown(): Promise<string> {
     try {
-      return await invoke<string>('export_chats_markdown', { character_id: configStore.currentCharacterId })
+      return await invoke<string>('export_chats_markdown', { characterId: configStore.currentCharacterId })
     } catch (err) {
       console.error('Failed to export markdown:', err)
       return '# 导出失败'
@@ -363,7 +363,7 @@ export const useChatStore = defineStore('chat', () => {
   // Get memory info
   async function getMemoryInfo() {
     try {
-      return await invoke<any>('get_memory_info', { character_id: configStore.currentCharacterId })
+      return await invoke<any>('get_memory_info', { characterId: configStore.currentCharacterId })
     } catch (err) {
       console.error('Failed to get memory info:', err)
       return null
@@ -373,7 +373,7 @@ export const useChatStore = defineStore('chat', () => {
   // Clear all chats
   async function clearAllChats() {
     try {
-      await invoke('clear_all_chats', { character_id: configStore.currentCharacterId })
+      await invoke('clear_all_chats', { characterId: configStore.currentCharacterId })
       messages.value = []
     } catch (err) {
       console.error('Failed to clear all chats:', err)
