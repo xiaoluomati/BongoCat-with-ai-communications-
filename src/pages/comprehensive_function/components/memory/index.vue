@@ -52,7 +52,7 @@ const monthChats = ref<DayChat[]>([])
 const allChats = ref<DayChat[]>([])
 const weeklySummaries = ref<WeeklySummary[]>([])
 const monthlySummaries = ref<MonthlySummary[]>([])
-const expandedSections = ref<Set<string>>(new Set(['today', 'weekly', 'monthly']))
+const expandedSections = ref<Set<string>>(new Set(['today']))
 const selectedChat = ref<{ date: string; messages: ChatMessage[] } | null>(null)
 
 async function loadAll() {
