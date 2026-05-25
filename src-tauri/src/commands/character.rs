@@ -119,14 +119,26 @@ pub fn check_and_update_profile(character_id: String, conversation_count: u32, f
 // Internal async function (not a command)
 pub async fn trigger_profile_update(character_id: String, llm_manager: Arc<LLMManager>) -> Result<UserProfile, String> {
     use crate::llm::ChatMessage;
-    
-    // 获取最近对话
-    let chat_result = crate::commands::memory::get_today_chat(character_id.clone());
-    let messages: Vec<_> = match chat_result {
-        Ok(chat) => chat.messages.iter().take(50).cloned().collect(),
-        Err(_) => vec![],
-    };
-    
+
+    // Get all chat dates and collect messages from recent history
+    let dates = crate::commands::memory::get_chat_dates(character_id.clone())
+        .unwrap_or_default();
+
+    let mut all_messages: Vec<ChatMessage> = Vec::new();
+    for date in dates.iter().take(30) {
+        if let Ok(day_chat) = crate::commands::memory::get_chat_by_date(character_id.clone(), date.clone()) {
+            for msg in day_chat.messages {
+                all_messages.push(ChatMessage {
+                    role: msg.role,
+                    content: msg.content,
+                });
+            }
+        }
+    }
+
+    // Take most recent 100 messages for analysis
+    let messages: Vec<_> = all_messages.into_iter().rev().take(100).collect();
+
     if messages.is_empty() {
         return Err("暂无对话数据".to_string());
     }
