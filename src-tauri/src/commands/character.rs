@@ -176,6 +176,7 @@ pub async fn trigger_profile_update(character_id: String, llm_manager: Arc<LLMMa
         return Err("暂无对话数据".to_string());
     }
 
+    let character_name = get_current_character_name();
     let new_chat_text: String = recent_user_messages.iter()
         .map(|(ts, m)| {
             let datetime = chrono::DateTime::from_timestamp_millis(*ts)
@@ -183,7 +184,7 @@ pub async fn trigger_profile_update(character_id: String, llm_manager: Arc<LLMMa
                 .unwrap_or_else(|| "未知时间".to_string());
             let role_label = match m.role.as_str() {
                 "user" => "我",
-                "assistant" => "Bongo",
+                "assistant" => character_name.as_str(),
                 _ => &m.role,
             };
             format!("[{}] {}: {}", datetime, role_label, m.content)
@@ -230,12 +231,12 @@ pub async fn trigger_profile_update(character_id: String, llm_manager: Arc<LLMMa
 3. 如果旧信息与新对话矛盾，以新对话为准
 4. 如果没有新对话中的某个维度信息，则保留旧画像中的对应内容
 5. date字段格式为YYYY-MM-DD，必须从对话时间[2026-05-25 10:30]中提取当天日期，不得使用"未知"等占位文字
-6. 【重要】指代规则：对话历史中冒号前的文字即为角色名称（如"我"、"Bongo"），summary和description中凡是指代角色的地方必须直接写这些名称，不要写"用户"、"助手"、"伙伴"、"对方"、"它"等代称
-7. 【重要】summary和description必须是自然语言改写，绝对禁止直接复制或拼接对话原文，禁止在summary/description中出现[时间 我:]或[时间 Bongo:]这样的原始格式
+6. 【重要】角色名称：对话历史中冒号前的"{}"就是AI角色的真实名字，绝不允许替换成其他名称，禁止使用"助手"、"伙伴"、"对方"、"猫"、"它"等词汇来指代{}
+7. 【重要】summary和description必须是自然语言改写，绝对禁止直接复制或拼接对话原文，禁止在summary/description中出现[时间 我:]或[时间 {}:]这样的原始格式
 
 请按以下JSON格式输出（只需输出JSON，不要其他内容）：
-{{"user_name": "用户名或null", "traits": ["特点1", "特点2"], "preferences": {{"喜欢音乐": "古典音乐"}}, "important_dates": {{"生日": "06-15"}}, "recent_interactions": [{{"date": "2026-05-25", "activity": "一起听音乐", "summary": "我和Bongo一起听了古典音乐"}}], "special_memories": [{{"title": "第一次聊天", "description": "我和Bongo第一次聊天，我分享了自己喜欢的音乐", "date": "2026-05-25", "tags": ["回忆"]}}]}}"#,
-        profile_summary, new_chat_text);
+{{"user_name": "用户名或null", "traits": ["特点1", "特点2"], "preferences": {{"喜欢音乐": "古典音乐"}}, "important_dates": {{"生日": "06-15"}}, "recent_interactions": [{{"date": "2026-05-25", "activity": "一起听音乐", "summary": "我和{}一起听了古典音乐"}}], "special_memories": [{{"title": "第一次聊天", "description": "我和{}第一次聊天，我分享了自己喜欢的音乐", "date": "2026-05-25", "tags": ["回忆"]}}]}}"#,
+        profile_summary, new_chat_text, character_name, character_name, character_name, character_name, character_name);
 
     let messages = vec![ChatMessage::user(&prompt)];
     let response = llm_manager.chat_with_params(messages, 0.7, 20000).await.map_err(|e| e.to_string())?;
@@ -342,6 +343,17 @@ pub async fn trigger_profile_update_command(
 pub fn get_current_character() -> Result<String, String> {
     let config = crate::commands::config::load_config()?;
     Ok(config.characters.current)
+}
+
+fn get_current_character_name() -> String {
+    let current_id = match crate::commands::config::load_config() {
+        Ok(c) => c.characters.current,
+        Err(_) => return "Bongo".to_string(),
+    };
+    match crate::commands::config::load_character(current_id) {
+        Ok(ch) => ch.name,
+        Err(_) => "Bongo".to_string(),
+    }
 }
 
 /// 切换当前角色
