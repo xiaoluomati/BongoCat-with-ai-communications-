@@ -184,6 +184,13 @@ pub async fn trigger_profile_update(character_id: String, llm_manager: Arc<LLMMa
     let dates = crate::commands::memory::get_chat_dates(character_id.clone())
         .unwrap_or_default();
 
+    // Compute actual conversation count from chat history (not from profile)
+    let actual_count: u32 = dates.iter().map(|date| {
+        crate::commands::memory::get_chat_by_date(character_id.clone(), date.clone())
+            .map(|c| c.messages.iter().filter(|m| m.role == "user").count() as u32)
+            .unwrap_or(0)
+    }).sum();
+
     let mut all_messages: Vec<(i64, ChatMessage)> = Vec::new();
     for date in dates.iter() {
         if let Ok(day_chat) = crate::commands::memory::get_chat_by_date(character_id.clone(), date.clone()) {
@@ -264,6 +271,7 @@ pub async fn trigger_profile_update(character_id: String, llm_manager: Arc<LLMMa
 2. 分析新对话，提炼新的性格特点、偏好、重要日期、互动和回忆
 3. 如果旧信息与新对话矛盾，以新对话为准
 4. 如果没有新对话中的某个维度信息，则保留旧画像中的对应内容
+5. 注意：对话记录中已标注准确时间，输出的日期必须使用对话中实际出现的时间，不得使用"未知"等占位文字
 
 请按以下JSON格式输出（只需输出JSON，不要其他内容）：
 {{"user_name": "用户名或null", "traits": ["特点1", "特点2"], "preferences": {{"喜欢音乐": "古典音乐"}}, "important_dates": {{"生日": "06-15"}}, "recent_interactions": [{{"date": "2024-01-01", "activity": "一起听音乐", "summary": "用户分享了他喜欢的古典音乐"}}], "special_memories": [{{"title": "第一次聊天", "description": "用户第一次打开应用和我们聊天", "date": "2024-01-01", "tags": ["回忆"]}}]}}"#,
@@ -329,7 +337,8 @@ pub async fn trigger_profile_update(character_id: String, llm_manager: Arc<LLMMa
         }
 
         profile.last_updated = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
-        profile.last_update_conversation_count = profile.conversation_count;
+        profile.conversation_count = actual_count;
+        profile.last_update_conversation_count = actual_count;
 
         save_user_profile(character_id, profile.clone())?;
         return Ok(profile);
@@ -344,10 +353,26 @@ pub async fn trigger_profile_update_command(
     character_id: String,
     llm_manager: State<'_, Arc<LLMManager>>,
 ) -> Result<UserProfile, String> {
-    let profile = get_user_profile(character_id.clone())?;
-    if profile.conversation_count == profile.last_update_conversation_count {
-        return Err("画像已是最新，无需更新".to_string());
+    let profile_path = get_profile_dir(&character_id).join("user_profile.json");
+    let profile_exists = profile_path.exists();
+
+    // Count actual user messages from chat history
+    let dates = crate::commands::memory::get_chat_dates(character_id.clone()).unwrap_or_default();
+    let actual_count: u32 = dates.iter().map(|date| {
+        crate::commands::memory::get_chat_by_date(character_id.clone(), date.clone())
+            .map(|c| c.messages.iter().filter(|m| m.role == "user").count() as u32)
+            .unwrap_or(0)
+    }).sum();
+
+    if profile_exists {
+        let profile = get_user_profile(character_id.clone()).ok();
+        if let Some(p) = profile {
+            if actual_count == 0 || p.last_update_conversation_count >= actual_count {
+                return Err("画像已是最新，无需更新".to_string());
+            }
+        }
     }
+
     trigger_profile_update(character_id, llm_manager.inner().clone()).await
 }
 
