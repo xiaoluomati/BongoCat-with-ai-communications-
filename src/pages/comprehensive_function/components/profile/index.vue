@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { Button, Input, message, Modal, Tag } from 'ant-design-vue'
+import { useConfigStore } from '@/stores/config'
 import ProList from '@/components/pro-list/index.vue'
 import ProListItem from '@/components/pro-list-item/index.vue'
 
@@ -25,11 +26,13 @@ interface Profile {
   important_dates: Record<string, string>
   recent_interactions: Interaction[]
   special_memories: SpecialMemory[]
-  conversation_count: number
+  last_update_conversation_count: number
   last_updated: string
 }
 
 const loading = ref(false)
+const isRefreshing = ref(false)
+const expandedSections = ref<Set<string>>(new Set())
 const profileData = ref<Profile>({
   user_name: null,
   traits: [],
@@ -37,11 +40,13 @@ const profileData = ref<Profile>({
   important_dates: {},
   recent_interactions: [],
   special_memories: [],
-  conversation_count: 0,
+  last_update_conversation_count: 0,
   last_updated: '',
 })
 
+const configStore = useConfigStore()
 const isModalOpen = ref(false)
+const currentCharacterName = ref('')
 const editForm = ref<Profile>({} as Profile)
 const newTrait = ref('')
 const newPrefKey = ref('')
@@ -52,7 +57,8 @@ const newDateValue = ref('')
 async function loadProfile() {
   loading.value = true
   try {
-    const data = await invoke<any>('get_user_profile')
+    const charId = configStore.currentCharacterId || 'cat'
+    const data = await invoke<any>('get_user_profile', { characterId: charId })
     profileData.value = {
       user_name: data.user_name || null,
       traits: data.traits || [],
@@ -60,7 +66,7 @@ async function loadProfile() {
       important_dates: data.important_dates || {},
       recent_interactions: data.recent_interactions || [],
       special_memories: data.special_memories || [],
-      conversation_count: data.conversation_count || 0,
+      last_update_conversation_count: data.last_update_conversation_count || 0,
       last_updated: data.last_updated || '',
     }
   } catch (e) {
@@ -82,7 +88,7 @@ function openEdit() {
 
 async function saveProfile() {
   try {
-    await invoke('save_user_profile', { profile: editForm.value })
+    await invoke('save_user_profile', { characterId: configStore.currentCharacterId || 'cat', profile: editForm.value })
     profileData.value = JSON.parse(JSON.stringify(editForm.value))
     message.success('保存成功')
     isModalOpen.value = false
@@ -144,20 +150,59 @@ function getDatesText(dates: Record<string, string>) {
   return Object.entries(dates).map(([k, v]) => `${k}: ${v}`).join('， ')
 }
 
-onMounted(loadProfile)
+function toggleSection(key: string) {
+  if (expandedSections.value.has(key)) {
+    expandedSections.value.delete(key)
+  } else {
+    expandedSections.value.add(key)
+  }
+}
+
+async function refreshProfile() {
+  if (isRefreshing.value) return
+  isRefreshing.value = true
+  try {
+    await invoke('trigger_profile_update_command', { characterId: configStore.currentCharacterId || 'cat' })
+    message.success('画像已刷新')
+    await loadProfile()
+  } catch (e: any) {
+    if (e?.message?.includes('已是最新') || e === '画像已是最新，无需更新') {
+      message.info('画像已是最新，无需更新')
+    } else {
+      console.error(e)
+      message.error('刷新失败')
+    }
+  } finally {
+    isRefreshing.value = false
+  }
+}
+
+onMounted(async () => {
+  await configStore.init()
+  console.log('[profile] currentCharacterId:', configStore.currentCharacterId, 'initialized:', configStore.initialized)
+  console.log('[profile] currentCharacter:', configStore.currentCharacter)
+  currentCharacterName.value = configStore.currentCharacter?.name || configStore.currentCharacterId || 'unknown'
+  await loadProfile()
+})
 </script>
 
 <template>
-  <ProList :loading="loading">
-    <!-- Header -->
-    <div class="mb-4 flex items-center justify-between">
-      <div></div>
+  <!-- Character Badge + Edit Button -->
+  <div class="profile-header">
+    <div class="profile-title">
+      <span class="profile-name">{{ currentCharacterName }}</span>
+      <span class="profile-subtitle">用户画像</span>
+    </div>
+    <div class="profile-actions">
+      <Button size="small" :loading="isRefreshing" @click="refreshProfile">刷新画像</Button>
       <Button type="primary" size="small" @click="openEdit">编辑</Button>
     </div>
+  </div>
 
+  <ProList :loading="loading">
     <!-- Basic Info -->
     <ProListItem title="用户名" :description="profileData.user_name || '未设置'" />
-    <ProListItem title="对话轮数" :description="String(profileData.conversation_count || 0)" />
+    <ProListItem title="已整理轮数" :description="String(profileData.last_update_conversation_count || 0)" />
     <ProListItem title="上次更新" :description="fmtDate(profileData.last_updated)" />
 
     <!-- Traits -->
@@ -168,45 +213,88 @@ onMounted(loadProfile)
       </div>
     </ProListItem>
 
-    <!-- Preferences -->
-    <ProListItem title="偏好">
-      <div class="text-sm mt-1">
-        {{ getPreferencesText(profileData.preferences) }}
+    <!-- Collapsible Sections -->
+    <!-- 偏好 -->
+    <div class="section-card">
+      <div class="section-header" @click="toggleSection('preferences')">
+        <span class="section-title">偏好</span>
+        <span class="section-count">
+          {{ Object.keys(profileData.preferences || {}).length > 0 ? `${Object.keys(profileData.preferences || {}).length} 项` : '暂无' }}
+        </span>
+        <span class="expand-icon">{{ expandedSections.has('preferences') ? '▼' : '▶' }}</span>
       </div>
-    </ProListItem>
-
-    <!-- Important Dates -->
-    <ProListItem title="重要日期">
-      <div class="text-sm mt-1">
-        {{ getDatesText(profileData.important_dates) }}
-      </div>
-    </ProListItem>
-
-    <!-- Recent Interactions (只读，由AI自动更新) -->
-    <ProListItem title="最近互动">
-      <div v-if="profileData.recent_interactions?.length" class="space-y-2 mt-1">
-        <div v-for="(item, i) in profileData.recent_interactions.slice(0, 3)" :key="i" class="text-sm bg-gray-50 p-2 rounded">
-          <div class="text-gray-500">{{ item.date }} - {{ item.activity }}</div>
-          <div>{{ item.summary }}</div>
+      <div v-if="expandedSections.has('preferences')" class="section-content">
+        <div v-if="Object.keys(profileData.preferences || {}).length > 0" class="space-y-1 px-3 py-2">
+          <div v-for="(v, k) in profileData.preferences" :key="k" class="text-sm">
+            <span class="text-gray-500">{{ k }}:</span> {{ v }}
+          </div>
         </div>
+        <div v-else class="empty-text px-3 py-2">暂无</div>
       </div>
-      <span v-else class="text-gray-400">暂无</span>
-    </ProListItem>
+    </div>
 
-    <!-- Special Memories (只读，由AI自动更新) -->
-    <ProListItem title="专属回忆">
-      <div v-if="profileData.special_memories?.length" class="space-y-2 mt-1">
-        <div v-for="(mem, i) in profileData.special_memories.slice(0, 3)" :key="i" class="text-sm bg-purple-50 p-2 rounded">
-          <div class="font-medium">{{ mem.title }}</div>
-          <div class="text-gray-600">{{ mem.description }}</div>
-        </div>
+    <!-- 重要日期 -->
+    <div class="section-card">
+      <div class="section-header" @click="toggleSection('dates')">
+        <span class="section-title">重要日期</span>
+        <span class="section-count">
+          {{ Object.keys(profileData.important_dates || {}).length > 0 ? `${Object.keys(profileData.important_dates || {}).length} 项` : '暂无' }}
+        </span>
+        <span class="expand-icon">{{ expandedSections.has('dates') ? '▼' : '▶' }}</span>
       </div>
-      <span v-else class="text-gray-400">暂无</span>
-    </ProListItem>
+      <div v-if="expandedSections.has('dates')" class="section-content">
+        <div v-if="Object.keys(profileData.important_dates || {}).length > 0" class="space-y-1 px-3 py-2">
+          <div v-for="(v, k) in profileData.important_dates" :key="k" class="text-sm">
+            <span class="text-gray-500">{{ k }}:</span> {{ v }}
+          </div>
+        </div>
+        <div v-else class="empty-text px-3 py-2">暂无</div>
+      </div>
+    </div>
+
+    <!-- 最近互动 -->
+    <div class="section-card">
+      <div class="section-header" @click="toggleSection('interactions')">
+        <span class="section-title">最近互动</span>
+        <span class="section-count">
+          {{ profileData.recent_interactions?.length > 0 ? `${profileData.recent_interactions.length} 条` : '暂无' }}
+        </span>
+        <span class="expand-icon">{{ expandedSections.has('interactions') ? '▼' : '▶' }}</span>
+      </div>
+      <div v-if="expandedSections.has('interactions')" class="section-content">
+        <div v-if="profileData.recent_interactions?.length" class="space-y-2 px-3 py-2">
+          <div v-for="(item, i) in profileData.recent_interactions.slice(0, 5)" :key="i" class="text-sm bg-gray-50 p-2 rounded">
+            <div class="text-gray-500">{{ item.date }} - {{ item.activity }}</div>
+            <div>{{ item.summary }}</div>
+          </div>
+        </div>
+        <div v-else class="empty-text px-3 py-2">暂无</div>
+      </div>
+    </div>
+
+    <!-- 专属回忆 -->
+    <div class="section-card">
+      <div class="section-header" @click="toggleSection('memories')">
+        <span class="section-title">专属回忆</span>
+        <span class="section-count">
+          {{ profileData.special_memories?.length > 0 ? `${profileData.special_memories.length} 条` : '暂无' }}
+        </span>
+        <span class="expand-icon">{{ expandedSections.has('memories') ? '▼' : '▶' }}</span>
+      </div>
+      <div v-if="expandedSections.has('memories')" class="section-content">
+        <div v-if="profileData.special_memories?.length" class="space-y-2 px-3 py-2">
+          <div v-for="(mem, i) in profileData.special_memories.slice(0, 5)" :key="i" class="text-sm bg-purple-50 p-2 rounded">
+            <div class="font-medium">{{ mem.title }}</div>
+            <div class="text-gray-600">{{ mem.description }}</div>
+          </div>
+        </div>
+        <div v-else class="empty-text px-3 py-2">暂无</div>
+      </div>
+    </div>
   </ProList>
 
   <!-- Edit Modal -->
-  <Modal v-model:open="isModalOpen" title="编辑用户画像" width="600" @ok="saveProfile">
+  <Modal v-model:open="isModalOpen" :title="`编辑 ${currentCharacterName} 的用户画像`" width="600" @ok="saveProfile">
     <div class="space-y-4 max-h-[60vh] overflow-y-auto">
       <!-- User Name -->
       <div>
@@ -265,3 +353,82 @@ onMounted(loadProfile)
     </div>
   </Modal>
 </template>
+
+<style scoped>
+.profile-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  background: #f5f5f5;
+  border-radius: 8px;
+  border: 1px solid #e8e8e8;
+}
+
+.profile-title {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.profile-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.section-card {
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #e8e8e8;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  background: #fafafa;
+  cursor: pointer;
+  user-select: none;
+}
+
+.section-title {
+  font-weight: bold;
+  font-size: 14px;
+  color: #333;
+}
+
+.section-count {
+  margin-left: auto;
+  margin-right: 8px;
+  font-size: 12px;
+  color: #999;
+}
+
+.expand-icon {
+  font-size: 10px;
+  color: #999;
+}
+
+.section-content {
+  background: white;
+}
+
+.empty-text {
+  font-size: 13px;
+  color: #999;
+}
+
+.profile-name {
+  font-size: 16px;
+  font-weight: bold;
+  color: #333;
+}
+
+.profile-subtitle {
+  font-size: 14px;
+  color: #888;
+}
+</style>

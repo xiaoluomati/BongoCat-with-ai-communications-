@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import { CloseOutlined, SendOutlined, SettingOutlined } from '@ant-design/icons-vue'
-import { Button, Input, Spin } from 'ant-design-vue'
+import { Button, Spin } from 'ant-design-vue'
 import { getCurrentWebviewWindow, WebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { invoke } from '@tauri-apps/api/core'
 import { onMounted, ref, nextTick, watch } from 'vue'
 
 import { useChatStore } from '@/stores/chat'
 import { useTTSStore } from '@/stores/tts'
+import { useConfigStore } from '@/stores/config'
 import type { ChatMessage } from '@/stores/chat'
 
 const chatStore = useChatStore()
 const ttsStore = useTTSStore()
+const configStore = useConfigStore()
 
 // Replay TTS for a message
 async function replayTTS(msg: ChatMessage) {
@@ -20,6 +22,7 @@ async function replayTTS(msg: ChatMessage) {
   }
 }
 const inputText = ref('')
+const inputRef = ref<HTMLInputElement | null>(null)
 const messagesContainer = ref<HTMLElement | null>(null)
 const chatWindow = getCurrentWebviewWindow()
 const currentCharacter = ref('Bongo Cat')
@@ -32,24 +35,21 @@ const hasMoreHistory = ref(true)
 
 // Load config and history on mount
 onMounted(async () => {
+  await configStore.init()
   await chatStore.loadConfig()
   await ttsStore.init()
   // 先加载今天的消息
   await chatStore.loadHistory()
   loadedDates.value = [getTodayString()]
-  
-  // Get current character name
-  try {
-    const config = await invoke<any>('load_config')
-    if (config.characters?.current) {
-      const char = await invoke<any>('load_character', { id: config.characters.current })
-      currentCharacter.value = char.name || 'Bongo Cat'
-      characterAvatar.value = char.avatar || ''
+
+  // Watch for character changes
+  watch(() => configStore.currentCharacter, (char) => {
+    if (char) {
+      currentCharacter.value = char.name
+      characterAvatar.value = char.avatar ? (char.avatar.startsWith('http') ? char.avatar : convertFileSrc(char.avatar)) : ''
     }
-  } catch (e) {
-    console.error('Failed to load character:', e)
-  }
-  
+  }, { immediate: true })
+
   // 滚动到底部
   scrollToBottom()
   
@@ -79,7 +79,7 @@ async function loadMoreHistory() {
   
   try {
     // 获取所有有聊天记录的日期
-    const allDates = await invoke<string[]>('get_chat_dates')
+    const allDates = await invoke<string[]>('get_chat_dates', { characterId: configStore.currentCharacterId })
     
     // 找出还没加载的日期
     const unloadedDates = allDates.filter(date => !loadedDates.value.includes(date))
@@ -98,7 +98,7 @@ async function loadMoreHistory() {
     const oldHeight = container?.scrollHeight || 0
     
     // 加载该日期的消息
-    const dayChat = await invoke<any>('get_chat_by_date', { date: oldestDate })
+    const dayChat = await invoke<any>('get_chat_by_date', { characterId: configStore.currentCharacterId, date: oldestDate })
     
     if (dayChat?.messages?.length > 0) {
       // 构建日期分隔消息
@@ -167,7 +167,10 @@ async function handleSend() {
   if (!inputText.value.trim() || chatStore.isLoading) return
   
   const text = inputText.value.trim()
+  
+  // Clear input immediately - native input element, direct DOM manipulation
   inputText.value = ''
+  inputRef.value?.focus()
   
   await chatStore.sendMessage(text)
   
@@ -192,7 +195,6 @@ async function handleClose() {
 async function handleSettings() {
   // 使用 activate_window 确保设置窗口在最前，同时降低其他窗口层级
   await invoke('activate_window', { windowLabel: 'comprehensive_function' })
-  await chatWindow.hide()
 }
 
 // Format time
@@ -284,8 +286,9 @@ function formatTime(timestamp: number): string {
 
     <!-- Input -->
     <div class="input-container">
-      <Input
-        v-model:value="inputText"
+      <input
+        ref="inputRef"
+        v-model="inputText"
         class="chat-input"
         placeholder="输入消息..."
         :disabled="chatStore.isLoading || !chatStore.enabled"

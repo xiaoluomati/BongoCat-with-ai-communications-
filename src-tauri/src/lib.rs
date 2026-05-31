@@ -10,16 +10,17 @@ use commands::{
     get_chat_by_date, get_chat_dates, get_chat_history, get_llm_config, get_main_window_position,
     get_memory_info, get_monthly_summaries, get_today_chat, get_weekly_summaries,
     hide_chat_window, load_config, save_chat_message, save_config, save_monthly_summary,
-    save_weekly_summary, send_message, set_system_prompt, show_chat_window, toggle_chat_window,
+    save_weekly_summary, send_message, send_message_stream, set_system_prompt, show_chat_window, toggle_chat_window,
     set_chat_always_on_top, activate_window, exit_app, relaunch_app,
     trigger_monthly_summary, trigger_weekly_summary, trigger_quarter, trigger_year,
     ChatState, start_scheduler,
     load_character, list_characters, save_character, delete_character,
     get_current_character, switch_character, get_current_character_voice_id,
-    get_user_profile, save_user_profile, check_and_update_profile,
+    get_user_profile, save_user_profile, trigger_profile_update_command,
     save_quarterly_summary, get_quarterly_summaries, save_yearly_summary, get_yearly_summaries,
     get_tts_config, save_tts_config, get_voice_config, save_voice, delete_voice,
     tts_speak, tts_speak_with_emotion, clear_tts_cache, get_tts_cache_info, get_index_tts_voices, get_index_tts_emos, save_tts_meta, get_tts_meta, get_tts_replay_paths,
+    emit_event, clear_chat_by_range, get_character_memory_info,
 };
 use core::{
     device::start_device_listening,
@@ -95,6 +96,7 @@ pub fn run() {
             save_config,
             get_llm_config,
             send_message,
+            send_message_stream,
             get_chat_history,
             clear_chat_history,
             set_system_prompt,
@@ -108,7 +110,7 @@ pub fn run() {
             get_current_character_voice_id,
             get_user_profile,
             save_user_profile,
-            check_and_update_profile,
+            trigger_profile_update_command,
             get_main_window_position,
             show_chat_window,
             hide_chat_window,
@@ -132,6 +134,8 @@ pub fn run() {
             export_all_chats,
             export_chats_markdown,
             clear_all_chats,
+            clear_chat_by_range,
+            get_character_memory_info,
             get_memory_info,
             trigger_weekly_summary,
             trigger_monthly_summary,
@@ -154,7 +158,8 @@ pub fn run() {
             get_index_tts_emos,
             save_tts_meta,
             get_tts_meta,
-            get_tts_replay_paths
+            get_tts_replay_paths,
+            emit_event
         ])
         .manage(Arc::new(RwLock::new(ChatState::default())))
         .plugin(tauri_plugin_custom_window::init())

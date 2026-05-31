@@ -1,6 +1,6 @@
 //! TTS (Text-to-Speech) Commands using IndexTTS API
 
-use crate::commands::config::{load_config, VoiceConfig};
+use crate::commands::config::{get_app_data_dir, load_config, VoiceConfig};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -154,12 +154,7 @@ pub async fn get_index_tts_emos(base_url: String) -> Result<Vec<String>, String>
 
 /// Get the cache directory for TTS audio files
 fn get_tts_cache_dir() -> PathBuf {
-    let cache_dir = dirs::data_local_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("cache")
-        .join("bongo-cat")
-        .join("tts")
-        .join("cache");
+    let cache_dir = get_app_data_dir().join("tts_cache");
     
     if !cache_dir.exists() {
         fs::create_dir_all(&cache_dir).ok();
@@ -170,12 +165,7 @@ fn get_tts_cache_dir() -> PathBuf {
 
 /// Get the archive directory for TTS audio files
 fn get_tts_archive_dir() -> PathBuf {
-    let archive_dir = dirs::data_local_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("cache")
-        .join("bongo-cat")
-        .join("tts")
-        .join("archive");
+    let archive_dir = get_app_data_dir().join("tts_archive");
     
     if !archive_dir.exists() {
         fs::create_dir_all(&archive_dir).ok();
@@ -389,7 +379,7 @@ pub async fn tts_speak(
         &emo_method,
         speed,
         tts_config.emo_weight,
-        &tts_config.base_url,
+        tts_config.base_url.as_deref().unwrap_or("http://localhost:9880"),
         &msg_id,
         seq,
     ).await
@@ -549,7 +539,7 @@ pub async fn tts_speak_with_emotion(
         &emo_method,
         speed,
         tts_config.emo_weight,
-        &tts_config.base_url,
+        tts_config.base_url.as_deref().unwrap_or("http://localhost:9880"),
         &msg_id,
         seq,
     ).await

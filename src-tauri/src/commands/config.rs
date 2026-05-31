@@ -27,7 +27,7 @@ impl Default for AppConfig {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct ChatConfig {
     pub enabled: bool,
     pub max_messages: u32,
@@ -35,18 +35,7 @@ pub struct ChatConfig {
     pub window_height: u32,
 }
 
-impl Default for ChatConfig {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            max_messages: 100,
-            window_width: 500,
-            window_height: 700,
-        }
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct LLMConfigData {
     pub provider: String,
     pub deepseek: ProviderConfig,
@@ -79,14 +68,14 @@ pub struct ProviderConfig {
 impl Default for ProviderConfig {
     fn default() -> Self {
         Self {
-            api_key: "".to_string(),
+            api_key: String::new(),
             base_url: "https://api.deepseek.com".to_string(),
-            model: "deepseek-v4-flash".to_string(),
+            model: "deepseek-chat".to_string(),
         }
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct MinimaxConfig {
     pub api_key: String,
     pub model: String,
@@ -125,9 +114,11 @@ impl Default for VoiceConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TTSConfig {
     pub enabled: bool,
-    pub base_url: String,
+    #[serde(default)]
+    pub base_url: Option<String>,
     pub default_voice_id: String,
     pub volume: i32,
+    #[serde(default = "default_speed")]
     pub speed: f32,
     #[serde(default)]
     pub voices: HashMap<String, VoiceConfig>,
@@ -149,6 +140,8 @@ pub struct TTSConfig {
     pub emo_weight: f32,
 }
 
+fn default_speed() -> f32 { 1.0 }
+
 fn default_emo_weight() -> f32 {
     0.8
 }
@@ -162,7 +155,7 @@ impl Default for TTSConfig {
     fn default() -> Self {
         Self {
             enabled: false,
-            base_url: "http://localhost:9880".to_string(),
+            base_url: Some("http://localhost:9880".to_string()),
             default_voice_id: "suyao".to_string(),
             volume: 80,
             speed: 1.0,
@@ -178,7 +171,7 @@ impl Default for TTSConfig {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct MemoryConfig {
     pub enabled: bool,
     pub retention_days: u32,
@@ -187,64 +180,28 @@ pub struct MemoryConfig {
     pub profile_update_interval: u32,
 }
 
-impl Default for MemoryConfig {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            retention_days: 30,
-            context_weeks: 2,
-            auto_summary: true,
-            profile_update_interval: 50,
-        }
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct CharactersConfig {
     pub current: String,
 }
 
-impl Default for CharactersConfig {
-    fn default() -> Self {
-        Self {
-            current: "cat".to_string(),
-        }
-    }
-}
-
-fn get_app_data_dir() -> PathBuf {
-    // Use system data directory - Tauri default app data dir
-    // Windows: %APPDATA%/com.ayangweb.BongoCat/data/config.json
-    // macOS: ~/Library/Application Support/com.ayangweb.BongoCat/data
-    // Linux: ~/.local/share/com.ayangweb.BongoCat/data
+pub fn get_app_data_dir() -> PathBuf {
     dirs::data_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
+        .unwrap_or_else(|| PathBuf::from("data"))
         .join("com.ayangweb.BongoCat")
-        .join("data")
 }
 
-fn get_data_dir() -> PathBuf { get_app_data_dir() }
+fn get_data_dir() -> PathBuf { get_app_data_dir().join("data") }
 
 fn get_config_path() -> PathBuf {
-    get_data_dir().join("config.json")
+    get_app_data_dir().join("config.json")
 }
 
 fn load_config_sync() -> Result<AppConfig, String> {
     let config_path = get_config_path();
     
     if !config_path.exists() {
-        // Try to load from bundled resource config as fallback
-        let resource_config = PathBuf::from("data/config.json");
-        if resource_config.exists() {
-            let content = fs::read_to_string(&resource_config).map_err(|e| e.to_string())?;
-            // Only use bundled config if it deserializes successfully
-            if let Ok(config) = serde_json::from_str::<AppConfig>(&content) {
-                return Ok(config);
-            }
-            // Bundled config is outdated/invalid, use default
-            // fall through to default below
-        }
-        // No valid config found, return default
+        // No config in user data dir — return default
         return Ok(AppConfig::default());
     }
     
@@ -333,7 +290,7 @@ pub struct Character {
 }
 
 fn get_characters_dir() -> PathBuf {
-    PathBuf::from("data/characters")
+    get_app_data_dir().join("characters")
 }
 
 fn get_default_characters_dir() -> PathBuf {
@@ -416,6 +373,17 @@ pub fn save_character(character: Character) -> Result<(), String> {
     let config_path = character_dir.join("config.json");
     let content = serde_json::to_string_pretty(&character).map_err(|e| e.to_string())?;
     fs::write(&config_path, content).map_err(|e| e.to_string())?;
+    
+    // Ensure per-character dirs exist
+    crate::commands::character::ensure_character_dirs(&character.id)?;
+    
+    // Migrate old global profile if it exists and this is the first character
+    let old_profile_path = get_app_data_dir().join("profile").join("user_profile.json");
+    let new_profile_path = get_app_data_dir().join("profile").join(&character.id).join("user_profile.json");
+    if old_profile_path.exists() && !new_profile_path.exists() {
+        let content = fs::read_to_string(&old_profile_path).map_err(|e| e.to_string())?;
+        fs::write(&new_profile_path, content).map_err(|e| e.to_string())?;
+    }
     
     Ok(())
 }

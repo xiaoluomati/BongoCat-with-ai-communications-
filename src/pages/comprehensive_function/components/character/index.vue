@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { DeleteOutlined, EditOutlined, PlusOutlined, SwapOutlined } from '@ant-design/icons-vue'
+import { DeleteOutlined, EditOutlined, PlusOutlined, SwapOutlined, UploadOutlined, PictureOutlined } from '@ant-design/icons-vue'
 import { Button, Card, Input, Modal, message, Select, Spin, Switch } from 'ant-design-vue'
-import { invoke } from '@tauri-apps/api/core'
+import { invoke, convertFileSrc } from '@tauri-apps/api/core'
+import { open } from '@tauri-apps/plugin-dialog'
 import { ref, onMounted, computed } from 'vue'
 
 import ProList from '@/components/pro-list/index.vue'
 import ProListItem from '@/components/pro-list-item/index.vue'
+import { useConfigStore } from '@/stores/config'
 
 // Types
 interface Character {
@@ -86,6 +88,20 @@ function openCreateModal() {
   isModalVisible.value = true
 }
 
+async function openAvatarPicker() {
+  try {
+    const file = await open({
+      multiple: false,
+      filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'] }],
+    })
+    if (file && typeof file === 'string') {
+      editingCharacter.value!.avatar = convertFileSrc(file)
+    }
+  } catch (err) {
+    console.error('Failed to pick avatar:', err)
+  }
+}
+
 // Open edit modal
 async function openEditModal(char: CharacterBrief) {
   console.warn('Opening edit modal for:', char)
@@ -123,6 +139,8 @@ async function saveCharacter() {
   
   try {
     await invoke('save_character', { character: editingCharacter.value })
+    const configStore = useConfigStore()
+    await configStore.saveCharacter(editingCharacter.value!)
     message.success(isEditing.value ? '角色已更新' : '角色已创建')
     isModalVisible.value = false
     await loadCharacters()
@@ -158,7 +176,8 @@ async function deleteCharacter(id: string) {
 // Switch character
 async function switchCharacter(id: string) {
   try {
-    await invoke('switch_character', { id })
+    const configStore = useConfigStore()
+    await configStore.switchCharacter(id)
     currentCharacterId.value = id
     message.success('已切换到 ' + characters.value.find(c => c.id === id)?.name)
   } catch (err) {
@@ -195,8 +214,9 @@ onMounted(() => {
       <div class="flex items-center justify-between w-full">
         <div class="flex items-center gap-3">
           <!-- Avatar -->
-          <div class="w-12 h-12 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white text-lg font-bold">
-            {{ char.name.charAt(0).toUpperCase() }}
+          <div class="w-12 h-12 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white text-lg font-bold overflow-hidden">
+            <img v-if="char.avatar" :src="char.avatar" class="w-full h-full object-cover" alt="avatar">
+            <span v-else>{{ char.name.charAt(0).toUpperCase() }}</span>
           </div>
           
           <!-- Info -->
@@ -246,7 +266,7 @@ onMounted(() => {
   <!-- Edit/Create Modal -->
   <Modal
     v-model:open="isModalVisible"
-    :title="isEditing ? '编辑角色' : '新建角色'"
+    :title="isEditing && editingCharacter ? `编辑角色：${editingCharacter.name}` : '新建角色'"
     :width="700"
     @ok="saveCharacter"
   >
@@ -267,6 +287,22 @@ onMounted(() => {
             v-model:value="editingCharacter.name" 
             placeholder="显示名称"
           />
+        </div>
+      </div>
+
+      <!-- Avatar -->
+      <div>
+        <label class="block text-sm font-medium mb-1">头像</label>
+        <div class="flex items-center gap-4">
+          <div class="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden">
+            <img v-if="editingCharacter.avatar" :src="editingCharacter.avatar" class="w-full h-full object-cover" alt="预览">
+            <PictureOutlined v-else class="text-2xl text-gray-400" />
+          </div>
+          <Button @click="openAvatarPicker">
+            <template #icon><UploadOutlined /></template>
+            选择图片
+          </Button>
+          <Button v-if="editingCharacter.avatar" @click="editingCharacter.avatar = ''" size="small">清除</Button>
         </div>
       </div>
 

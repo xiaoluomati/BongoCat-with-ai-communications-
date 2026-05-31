@@ -1,9 +1,10 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, nextTick } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 
 import { useTTSStore } from './tts'
+import { useConfigStore } from './config'
 import { createParserContext, parseEmotionChunk, getEmotionPrompt, extractPureText, type ParserContext } from '@/utils/emotion'
 
 export interface TTSAudioFile {
@@ -24,6 +25,8 @@ export interface ChatMessage {
 }
 
 export const useChatStore = defineStore('chat', () => {
+  const configStore = useConfigStore()
+
   const messages = ref<ChatMessage[]>([])
   const isLoading = ref(false)
   const enabled = ref(false)
@@ -34,6 +37,9 @@ export const useChatStore = defineStore('chat', () => {
   
   // Emotion parser state for streaming
   let emotionParser: ParserContext = createParserContext()
+  
+  // Stream listener reference for cleanup
+  let unlistenChunkRef: (() => void) | null = null
 
   // Load config
   async function loadConfig() {
@@ -50,6 +56,7 @@ export const useChatStore = defineStore('chat', () => {
   async function saveMessageToMemory(message: ChatMessage) {
     try {
       await invoke('save_chat_message', {
+        characterId: configStore.currentCharacterId,
         message: {
           id: message.id,
           role: message.role,
@@ -94,6 +101,12 @@ export const useChatStore = defineStore('chat', () => {
     }
     messages.value.push(userMessage)
 
+    // Scroll to bottom when user message is added
+    nextTick(() => {
+      const container = document.querySelector('.messages-container') as HTMLElement
+      if (container) container.scrollTop = container.scrollHeight
+    })
+
     // Save to memory
     await saveMessageToMemory(userMessage)
 
@@ -116,6 +129,7 @@ export const useChatStore = defineStore('chat', () => {
         const streamingMessageId = `msg_${Date.now() + 1}`
         let streamingContent = ''
         let pureTextContent = ''
+        let chunkCount = 0
         let _unlistenChunk: UnlistenFn | null = null
         let _unlistenEnd: UnlistenFn | null = null
         
@@ -132,41 +146,54 @@ export const useChatStore = defineStore('chat', () => {
         }
         messages.value.push(assistantMessage)
 
-        // Listen for chunks and trigger TTS streaming with emotion parsing
-        await listen<[string, string]>('chat_stream_chunk', (event) => {
+        // Remove any existing listeners first to avoid duplicates
+        if (unlistenChunkRef) {
+          unlistenChunkRef()
+          unlistenChunkRef = null
+        }
+        
+        console.log('[chat] setting up stream listener');
+        // Listen for chunks
+        unlistenChunkRef = await listen<[string, string]>('chat_stream_chunk', (event) => {
           const [, chunk] = event.payload
+          console.log('[chat] stream chunk received, len=', chunk.length, 'chunk=', JSON.stringify(chunk));
           streamingContent += chunk
+          chunkCount++
           
-          // Parse emotion from chunk
           if (emotionAuto) {
             const { context, result } = parseEmotionChunk(emotionParser, chunk)
             emotionParser = context
             
-            // Update emotion if parsed
             if (result.emotion) {
               ttsStore.setEmotion(result.emotion)
             }
             
-            // Append only pure text (no emotion tags) to message
+            // TTS: use result.text (emotion-stripped) if available, else raw chunk
+            ttsStore.speakStream(result.text || chunk)
+            
+            // Display: accumulate only result.text (emotion stripped), fall back to raw chunk
             if (result.text) {
               pureTextContent += result.text
-              // Update the message in place with pure text
-              const msgIndex = messages.value.findIndex(m => m.id === streamingMessageId)
-              if (msgIndex !== -1) {
-                messages.value[msgIndex].content = pureTextContent
-              }
+            } else {
+              pureTextContent += chunk
             }
-            
-            // Trigger TTS streaming
-            ttsStore.speakStream(result.text || chunk)
           } else {
-            // No emotion parsing, use raw chunk
             pureTextContent += chunk
-            const msgIndex = messages.value.findIndex(m => m.id === streamingMessageId)
-            if (msgIndex !== -1) {
-              messages.value[msgIndex].content = pureTextContent
-            }
             ttsStore.speakStream(chunk)
+          }
+          
+          // Update message display with accumulated text
+          const msgIndex = messages.value.findIndex(m => m.id === streamingMessageId)
+          console.log('[chat] msgIndex:', msgIndex, 'pureTextContent len:', pureTextContent.length);
+          if (msgIndex !== -1) {
+            messages.value[msgIndex].content = pureTextContent
+            console.log('[chat] message content updated, msg len:', messages.value[msgIndex].content.length);
+          }
+          
+          // Scroll every 15 chunks
+          if (chunkCount % 15 === 0) {
+            const container = document.querySelector('.messages-container') as HTMLElement
+            if (container) container.scrollTop = container.scrollHeight
           }
         })
 
@@ -181,11 +208,10 @@ export const useChatStore = defineStore('chat', () => {
 
           // Final update - ensure pure text
           const msgIndex = messages.value.findIndex(m => m.id === streamingMessageId)
+          const finalContent = msgIndex !== -1
+            ? (emotionAuto ? extractPureText(response.content) : response.content)
+            : response.content
           if (msgIndex !== -1) {
-            // Use extracted pure text or response content
-            const finalContent = emotionAuto 
-              ? extractPureText(response.content)
-              : response.content
             messages.value[msgIndex].content = finalContent
             
             // Save TTS meta if we have audio files
@@ -212,7 +238,11 @@ export const useChatStore = defineStore('chat', () => {
 
           return finalContent || response.content
         } finally {
-          // Cleanup listeners would be handled by Tauri automatically
+          // Cleanup stream listener to prevent duplicate messages
+          if (unlistenChunkRef) {
+            unlistenChunkRef()
+            unlistenChunkRef = null
+          }
         }
       } else {
         // Non-streaming mode: get full response at once
@@ -243,6 +273,12 @@ export const useChatStore = defineStore('chat', () => {
           timestamp: Date.now(),
         }
         messages.value.push(assistantMessage)
+
+        // Scroll to bottom after assistant message
+        nextTick(() => {
+          const container = document.querySelector('.messages-container') as HTMLElement
+          if (container) container.scrollTop = container.scrollHeight
+        })
 
         // Save to memory
         await saveMessageToMemory(assistantMessage)
@@ -277,7 +313,7 @@ export const useChatStore = defineStore('chat', () => {
   // Load today's chat from file
   async function loadHistory() {
     try {
-      const todayChat = await invoke<any>('get_today_chat')
+      const todayChat = await invoke<any>('get_today_chat', { characterId: configStore.currentCharacterId })
       if (todayChat && todayChat.messages) {
         messages.value = todayChat.messages.map((msg: any) => ({
           id: msg.id || `msg_${msg.timestamp}`,
@@ -317,7 +353,7 @@ export const useChatStore = defineStore('chat', () => {
   // Export as markdown
   async function exportChatsMarkdown(): Promise<string> {
     try {
-      return await invoke<string>('export_chats_markdown')
+      return await invoke<string>('export_chats_markdown', { characterId: configStore.currentCharacterId })
     } catch (err) {
       console.error('Failed to export markdown:', err)
       return '# 导出失败'
@@ -327,7 +363,7 @@ export const useChatStore = defineStore('chat', () => {
   // Get memory info
   async function getMemoryInfo() {
     try {
-      return await invoke<any>('get_memory_info')
+      return await invoke<any>('get_memory_info', { characterId: configStore.currentCharacterId })
     } catch (err) {
       console.error('Failed to get memory info:', err)
       return null
@@ -337,7 +373,7 @@ export const useChatStore = defineStore('chat', () => {
   // Clear all chats
   async function clearAllChats() {
     try {
-      await invoke('clear_all_chats')
+      await invoke('clear_all_chats', { characterId: configStore.currentCharacterId })
       messages.value = []
     } catch (err) {
       console.error('Failed to clear all chats:', err)
@@ -345,6 +381,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   return {
+    configStore,
     messages,
     isLoading,
     enabled,

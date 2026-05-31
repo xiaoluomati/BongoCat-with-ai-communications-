@@ -25,7 +25,8 @@ pub use memory::{
     save_chat_message, get_today_chat, get_chat_by_date, get_chat_dates,
     save_weekly_summary, get_weekly_summaries, save_monthly_summary, get_monthly_summaries,
     save_quarterly_summary, get_quarterly_summaries, save_yearly_summary, get_yearly_summaries,
-    export_all_chats, export_chats_markdown, clear_all_chats, get_memory_info
+    export_all_chats, export_chats_markdown, clear_all_chats, clear_chat_by_range,
+    get_character_memory_info, get_memory_info
 };
 
 pub use prompt::*;
@@ -37,7 +38,7 @@ pub use window::{
 };
 
 // Character - explicit export to avoid conflict with config
-pub use character::{UserProfile, CharacterBrief, get_user_profile, save_user_profile, check_and_update_profile, trigger_profile_update, get_current_character, switch_character, list_character_briefs, get_current_character_voice_id};
+pub use character::{UserProfile, CharacterBrief, get_user_profile, save_user_profile, trigger_profile_update, trigger_profile_update_command, get_current_character, switch_character, list_character_briefs, get_current_character_voice_id};
 
 // TTS commands
 pub use tts::{
@@ -46,3 +47,10 @@ pub use tts::{
     get_index_tts_voices, get_index_tts_emos,
     save_tts_meta, get_tts_meta, get_tts_replay_paths
 };
+
+/// Emit a global event to all windows
+#[tauri::command]
+pub async fn emit_event(app_handle: tauri::AppHandle, event: String, payload: serde_json::Value) -> Result<(), String> {
+    use tauri::Emitter;
+    app_handle.emit(&event, payload).map_err(|e: tauri::Error| e.to_string())
+}

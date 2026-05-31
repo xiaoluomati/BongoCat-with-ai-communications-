@@ -6,6 +6,7 @@ import { ref, onMounted, watch } from 'vue'
 
 import ProList from '@/components/pro-list/index.vue'
 import ProListItem from '@/components/pro-list-item/index.vue'
+import { useConfigStore } from '@/stores/config'
 
 // State
 const enabled = ref(false)
@@ -83,14 +84,14 @@ async function loadProviderConfig() {
       apiKey.value = providerConfig.api_key || ''
       model.value = providerConfig.model || defaultModels[provider.value]
       // 解析 base_url 为 host 和 port
-      const fullUrl = providerConfig.base_url || getDefaultBaseUrl() + ':' + getDefaultPort()
-      const match = fullUrl.match(/^(https?:\/\/[^:]+)(:(\d+))?$/)
+      const fullUrl = providerConfig.base_url || getDefaultBaseUrl() + (getDefaultPort() ? ':' + getDefaultPort() : '')
+      const match = fullUrl.match(/^(https?:\/\/[^:/]+)(:(\d+))?(\/.*)?$/)
       if (match) {
         baseHost.value = match[1]
-        basePort.value = match[3] ? parseInt(match[3]) : getDefaultPort()
+        basePort.value = match[3] ? parseInt(match[3]) : (getDefaultPort() || 0)
       } else {
         baseHost.value = getDefaultBaseUrl()
-        basePort.value = getDefaultPort()
+        basePort.value = getDefaultPort() || 0
       }
     } else {
       // 使用默认值
@@ -104,10 +105,17 @@ async function loadProviderConfig() {
   }
 }
 
+// 默认 base_url（云服务厂商）
+const defaultBaseUrls: Record<string, string> = {
+  deepseek: 'https://api.deepseek.com',
+  minimax: 'https://api.minimax.chat',
+  openai: 'https://api.openai.com',
+}
+
 // 获取默认 base_url
 function getDefaultBaseUrl(): string {
   if (provider.value === 'llama.cpp') return 'http://localhost'
-  return ''
+  return defaultBaseUrls[provider.value] || ''
 }
 
 // 获取默认端口
@@ -139,10 +147,27 @@ async function saveConfig() {
     config.llm[provider.value] = config.llm[provider.value] || {}
     config.llm[provider.value].api_key = apiKey.value
     config.llm[provider.value].model = model.value
-    // 拼接 host 和 port 为完整的 base_url
-    config.llm[provider.value].base_url = `${baseHost.value}:${basePort.value}`
+    // 只对需要端口的本地服务（如llama.cpp）拼接端口
+    if (provider.value === 'llama.cpp') {
+      config.llm[provider.value].base_url = `${baseHost.value}:${basePort.value}`
+    } else {
+      // 云服务 base_url 为空时用默认值兜底
+      config.llm[provider.value].base_url = baseHost.value || defaultBaseUrls[provider.value] || ''
+    }
     
     await invoke('save_config', { config })
+    const configStore = useConfigStore()
+    await configStore.saveLLM({
+      provider: provider.value,
+      [provider.value]: {
+        api_key: apiKey.value,
+        base_url: provider.value === 'llama.cpp' ? `${baseHost.value}:${basePort.value}` : (baseHost.value || defaultBaseUrls[provider.value] || ''),
+        model: model.value,
+      },
+      stream: stream.value,
+      temperature: temperature.value,
+      max_tokens: maxTokens.value,
+    })
     message.success('配置已保存')
   } catch (err) {
     console.error('Failed to save config:', err)

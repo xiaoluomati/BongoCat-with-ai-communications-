@@ -1,6 +1,6 @@
 //! Chat Commands
 
-use crate::commands::config;
+use crate::commands::config::{self, get_app_data_dir};
 use crate::llm::{ChatMessage, ChatResponse, LLMManager};
 use chrono::Local;
 use serde::{Deserialize, Serialize};
@@ -69,6 +69,7 @@ pub async fn send_message(
     let response = if is_streaming {
         // Streaming mode: emit chunks via events
         let chat_id = uuid::Uuid::new_v4().to_string();
+    println!("[chat] stream start, chat_id={}", chat_id);
         
         // Emit start event
         let _ = app_handle.emit("chat_stream_start", (&chat_id,));
@@ -78,7 +79,8 @@ pub async fn send_message(
         
         let response = llm_manager
             .chat_stream(messages, move |chunk| {
-                let _ = app_handle_clone.emit("chat_stream_chunk", (&chat_id_clone, &chunk));
+                println!("[chat] chunk received: {} chars", chunk.len());
+            let _ = app_handle_clone.emit("chat_stream_chunk", (&chat_id_clone, &chunk));
             })
             .await
             .map_err(|e| e.to_string())?;
@@ -99,27 +101,43 @@ pub async fn send_message(
     let mut state = chat_state.write().await;
     state.messages.push(user_message);
     state.messages.push(ChatMessage::assistant(&response.content));
-    
-    // Auto-update user profile
-    let msg_count = state.messages.len() / 2; // user + assistant = 1 pair
-    
-    // Note: For streaming mode, TTS is triggered by frontend via chunks
-    // This spawn is only for non-streaming mode when the full response is ready
-    
     drop(state);
-    
-    // Check if we should update profile (every 50 messages)
-    if msg_count > 0 && msg_count % 50 == 0 {
-        // Trigger profile update in background
+
+    // Compute actual count and check auto-update threshold
+    let character_id = match crate::commands::config::load_config() {
+        Ok(config) => config.characters.current,
+        Err(_) => {
+            println!("[chat] failed to load config");
+            return Err("failed to load config".to_string());
+        }
+    };
+
+    let dates = crate::commands::memory::get_chat_dates(character_id.clone()).unwrap_or_default();
+    let actual_count: u32 = dates.iter().map(|date| {
+        crate::commands::memory::get_chat_by_date(character_id.clone(), date.clone())
+            .map(|c| c.messages.iter().filter(|m| m.role == "user").count() as u32)
+            .unwrap_or(0)
+    }).sum();
+
+    let profile = match crate::commands::character::get_user_profile(character_id.clone()) {
+        Ok(p) => p,
+        Err(_) => return Ok(response.into()),
+    };
+
+    let new_messages_since_update = actual_count.saturating_sub(profile.last_update_conversation_count);
+
+    // Auto-update user profile when 50 new messages accumulated
+    if new_messages_since_update >= 50 {
         let llm_manager = llm_manager.inner().clone();
         tokio::spawn(async move {
-            match crate::commands::character::trigger_profile_update(llm_manager).await {
-                Ok(_) => {}
-                Err(_) => {} // silently ignore errors
+            match crate::commands::character::trigger_profile_update(character_id, llm_manager).await {
+                Ok(_) => println!("[chat] profile auto-updated"),
+                Err(e) => println!("[chat] profile auto-update failed: {}", e),
             }
         });
     }
-    
+
+    println!("[chat] stream end, response_len={}", response.content.len());
     Ok(response.into())
 }
 
@@ -148,6 +166,7 @@ pub async fn send_message_stream(
     
     // Create chat_id for event routing
     let chat_id = uuid::Uuid::new_v4().to_string();
+    println!("[chat] stream start, chat_id={}", chat_id);
     drop(state);
     
     // Emit start event
@@ -159,6 +178,7 @@ pub async fn send_message_stream(
     
     let response = llm_manager
         .chat_stream(messages, move |chunk| {
+            println!("[chat] chunk received: {} chars", chunk.len());
             let _ = app_handle_clone.emit("chat_stream_chunk", (&chat_id_clone, &chunk));
         })
         .await
@@ -171,7 +191,40 @@ pub async fn send_message_stream(
     let assistant_message = ChatMessage::assistant(&response.content);
     let mut state = chat_state.write().await;
     state.messages.push(assistant_message);
-    
+    drop(state);
+
+    // Compute actual count and check auto-update threshold
+    let character_id = match crate::commands::config::load_config() {
+        Ok(config) => config.characters.current,
+        Err(_) => return Err("failed to load config".to_string()),
+    };
+
+    let dates = crate::commands::memory::get_chat_dates(character_id.clone()).unwrap_or_default();
+    let actual_count: u32 = dates.iter().map(|date| {
+        crate::commands::memory::get_chat_by_date(character_id.clone(), date.clone())
+            .map(|c| c.messages.iter().filter(|m| m.role == "user").count() as u32)
+            .unwrap_or(0)
+    }).sum();
+
+    let profile = match crate::commands::character::get_user_profile(character_id.clone()) {
+        Ok(p) => p,
+        Err(_) => return Ok(response.into()),
+    };
+
+    let new_messages_since_update = actual_count.saturating_sub(profile.last_update_conversation_count);
+
+    // Auto-update user profile when 50 new messages accumulated
+    if new_messages_since_update >= 50 {
+        let llm_manager = llm_manager.inner().clone();
+        tokio::spawn(async move {
+            match crate::commands::character::trigger_profile_update(character_id, llm_manager).await {
+                Ok(_) => println!("[chat] profile auto-updated"),
+                Err(e) => println!("[chat] profile auto-update failed: {}", e),
+            }
+        });
+    }
+
+    println!("[chat] stream end, response_len={}", response.content.len());
     Ok(response.into())
 }
 
@@ -252,9 +305,7 @@ fn get_current_character() -> Result<config::Character, String> {
 
 /// Load user profile
 fn load_user_profile() -> Result<HashMap<String, String>, String> {
-    let profile_path = dirs::data_local_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("data")
+    let profile_path = get_app_data_dir()
         .join("profile")
         .join("user_profile.json");
     
@@ -300,9 +351,7 @@ fn load_user_profile() -> Result<HashMap<String, String>, String> {
 
 /// Load long term memory (weekly/monthly summaries)
 fn load_long_term_memory() -> Result<String, String> {
-    let memory_dir = dirs::data_local_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("data")
+    let memory_dir = get_app_data_dir()
         .join("memory");
     
     let mut memory = String::new();
@@ -370,9 +419,7 @@ fn load_long_term_memory() -> Result<String, String> {
 fn load_short_term_memory() -> Result<Vec<ChatMessage>, String> {
     let today = Local::now().format("%Y-%m-%d").to_string();
     
-    let chat_path = dirs::data_local_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("data")
+    let chat_path = get_app_data_dir()
         .join("memory")
         .join("chat")
         .join(format!("{}.json", today));
