@@ -54,6 +54,28 @@ pub fn save_chat_message(character_id: String, message: ChatMessage) -> Result<(
     Ok(())
 }
 
+/// Remove specific messages from today's chat file by their IDs.
+/// Used by the "retry" feature to remove the last user+assistant pair.
+#[tauri::command]
+pub fn remove_messages_by_id(character_id: String, message_ids: Vec<String>) -> Result<(), String> {
+    ensure_dirs(&character_id)?;
+    let today = get_today();
+    let file_path = get_chat_dir(&character_id).join(format!("{}.json", today));
+
+    if !file_path.exists() {
+        return Ok(());
+    }
+
+    let content = fs::read_to_string(&file_path).map_err(|e| e.to_string())?;
+    let mut day_chat: DayChat = serde_json::from_str(&content).map_err(|e| e.to_string())?;
+
+    day_chat.messages.retain(|m| !message_ids.contains(&m.id));
+
+    let content = serde_json::to_string_pretty(&day_chat).map_err(|e| e.to_string())?;
+    fs::write(&file_path, content).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 #[tauri::command]
 pub fn get_today_chat(character_id: String) -> Result<DayChat, String> {
     ensure_dirs(&character_id)?;

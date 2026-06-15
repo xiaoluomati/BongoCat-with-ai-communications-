@@ -1,7 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
-import { listen } from '@tauri-apps/api/event'
 import { EMOTION_MAP, DEFAULT_EMOTION } from '@/utils/emotion'
 
 interface TTSConfig {
@@ -66,13 +65,6 @@ export const useTTSStore = defineStore('tts', () => {
     } catch (err) {
       console.error('[TTS] Failed to load config:', err)
     }
-
-    // Listen for tts_ready event (non-streaming mode)
-    await listen<string>('tts_ready', async (event) => {
-      if (!isEnabled.value || isStreamMode.value) return
-      const audioUrl = event.payload
-      enqueue(audioUrl)
-    })
   }
 
   // Get config value with defaults
@@ -251,10 +243,11 @@ export const useTTSStore = defineStore('tts', () => {
   }
 
   // Manual speak (for testing, non-streaming mode)
-  async function speak(text: string, voiceId?: string): Promise<void> {
+  // Returns the audio file path, or null on failure/disabled
+  async function speak(text: string, voiceId?: string): Promise<string | null> {
     if (!isEnabled.value) {
       console.warn('[TTS] TTS is disabled')
-      return
+      return null
     }
 
     try {
@@ -263,21 +256,24 @@ export const useTTSStore = defineStore('tts', () => {
         voiceId: voiceId || null
       })
       enqueue(audioUrl, text)
+      return audioUrl
     } catch (err) {
       console.error('[TTS] speak error:', err)
+      return null
     }
   }
 
   // Speak with specific emotion
-  async function speakWithEmotion(text: string, emotion: string, voiceId?: string): Promise<void> {
+  // Returns the audio file path, or null on failure/disabled
+  async function speakWithEmotion(text: string, emotion: string, voiceId?: string): Promise<string | null> {
     if (!isEnabled.value) {
       console.warn('[TTS] TTS is disabled')
-      return
+      return null
     }
 
     // Normalize emotion to audio file
     const emotionFile = EMOTION_MAP[emotion] || DEFAULT_EMOTION
-    
+
     try {
       const audioUrl = await invoke<string>('tts_speak_with_emotion', {
         text,
@@ -285,10 +281,11 @@ export const useTTSStore = defineStore('tts', () => {
         voiceId: voiceId || null
       })
       enqueue(audioUrl, text)
+      return audioUrl
     } catch (err) {
       console.error('[TTS] speakWithEmotion error:', err)
       // Fallback to regular speak
-      speak(text, voiceId).catch(console.error)
+      return speak(text, voiceId)
     }
   }
 
@@ -307,9 +304,10 @@ export const useTTSStore = defineStore('tts', () => {
     emotionAutoEnabled.value = enabled
   }
 
-  // Stream speak - receives chunk, accumulates, triggers TTS when threshold met
-  async function speakStream(chunk: string): Promise<void> {
-    if (!isEnabled.value || !isStreamMode.value) return
+  // Stream speak - receives chunk, accumulates, triggers TTS when threshold met.
+  // Returns the audio file path if a flush was triggered, null otherwise.
+  async function speakStream(chunk: string): Promise<string | null> {
+    if (!isEnabled.value || !isStreamMode.value) return null
 
     // Accumulate chunk to buffer
     ttsBuffer.value += chunk
@@ -328,14 +326,15 @@ export const useTTSStore = defineStore('tts', () => {
     if (isEndMark || isTooLong || (isLongComma && len >= threshold)) {
       const text = flushBuffer()
       if (text) {
-        // Async TTS with current emotion, don't wait
         if (emotionAutoEnabled.value) {
-          speakWithEmotion(text, currentEmotion.value).catch(console.error)
+          return speakWithEmotion(text, currentEmotion.value)
         } else {
-          speak(text).catch(console.error)
+          return speak(text)
         }
       }
     }
+
+    return null
   }
 
   // Flush buffer and return text

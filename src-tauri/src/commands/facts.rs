@@ -5,7 +5,7 @@ use std::fs::{self, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
+use tokio::sync::Mutex;
 use uuid::Uuid;
 
 use crate::commands::character::{get_user_profile, save_user_profile, UserProfile};
@@ -117,7 +117,7 @@ fn now_timestamp() -> i64 {
 // ── 并发保护（定时合并）─────────────────────────────────────
 
 /// 异步 Mutex 保护 pending 文件写入
-static PENDING_FILE_MUTEX: Mutex<()> = Mutex::new(());
+static PENDING_FILE_MUTEX: Mutex<()> = Mutex::const_new(());
 
 /// 上次合并时间戳
 static LAST_MERGE_TS: AtomicU64 = AtomicU64::new(0);
@@ -161,7 +161,7 @@ fn increment_pending_count() {
 // ── Tauri Commands ─────────────────────────────────────────
 
 #[tauri::command]
-pub fn save_user_fact(
+pub async fn save_user_fact(
     subject: String,
     predicate: String,
     object: String,
@@ -204,8 +204,8 @@ pub fn save_user_fact(
     let json = serde_json::to_string(&fact).map_err(|e| e.to_string())?;
     let jsonl = json + "\n";
 
-    // 使用 std::sync::Mutex（持有锁时间尽量短）
-    let _guard = PENDING_FILE_MUTEX.lock().unwrap();
+    // 使用 tokio::sync::Mutex（不中毒，持有锁时间尽量短）
+    let _guard = PENDING_FILE_MUTEX.lock().await;
     let mut file = OpenOptions::new()
         .create(true)
         .append(true)
@@ -315,14 +315,18 @@ pub fn merge_pending_facts() -> Result<i32, String> {
     LAST_MERGE_TS.store(now_timestamp() as u64, Ordering::Relaxed);
 
     // ── UserProfile 同步 ─────────────────────────────────────────────
-    let mut profile = get_user_profile().unwrap_or_else(|_| UserProfile {
+    let character_id = crate::commands::config::load_config()
+        .map(|c| c.characters.current)
+        .unwrap_or_default();
+
+    let mut profile = get_user_profile(character_id.clone()).unwrap_or_else(|_| UserProfile {
         user_name: None,
         traits: vec![],
         preferences: HashMap::new(),
         important_dates: HashMap::new(),
         recent_interactions: vec![],
         special_memories: vec![],
-        conversation_count: 0,
+        last_update_conversation_count: 0,
         last_updated: String::new(),
     });
 
@@ -348,7 +352,9 @@ pub fn merge_pending_facts() -> Result<i32, String> {
     }
 
     profile.last_updated = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
-    let _ = save_user_profile(profile);
+    if let Err(e) = save_user_profile(character_id, profile) {
+        log::warn!("[facts] merge: failed to sync user profile: {}", e);
+    }
 
     Ok(merged.len() as i32)
 }

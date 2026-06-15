@@ -154,7 +154,8 @@ impl MinimaxClient {
             )));
         }
 
-        // Process streaming response
+        // Process streaming response with SSE-aware parsing.
+        // Events are delimited by double newlines per SSE spec.
         let mut stream = response.bytes_stream();
         let mut full_content = String::new();
         let mut buffer = String::new();
@@ -162,23 +163,30 @@ impl MinimaxClient {
         while let Some(item) = stream.next().await {
             match item {
                 Ok(bytes) => {
-                    if let Ok(text) = String::from_utf8(bytes.to_vec()) {
-                        buffer.push_str(&text);
-                        
-                        // Process complete lines
-                        while let Some(newline_pos) = buffer.find('\n') {
-                            let line = buffer.drain(..newline_pos + 1).collect::<String>();
-                            
-                            if line.starts_with("data: ") {
-                                let data = line.trim_start_matches("data: ");
-                                
-                                // Skip [DONE] message
-                                if data == "[DONE]" {
-                                    continue;
-                                }
-                                
-                                // Try to parse as stream chunk
-                                if let Ok(chunk) = serde_json::from_str::<StreamChunk>(data) {
+                    match String::from_utf8(bytes.to_vec()) {
+                        Ok(text) => buffer.push_str(&text),
+                        Err(e) => {
+                            log::warn!("[MiniMax] invalid UTF-8 in stream: {}", e);
+                            continue;
+                        }
+                    };
+
+                    // Process complete SSE events (delimited by \n\n)
+                    while let Some(event_end) = buffer.find("\n\n") {
+                        let event = buffer.drain(..event_end + 2).collect::<String>();
+
+                        for line in event.lines() {
+                            let data = match line.strip_prefix("data: ") {
+                                Some(d) => d,
+                                None => continue,
+                            };
+
+                            if data == "[DONE]" {
+                                break;
+                            }
+
+                            match serde_json::from_str::<StreamChunk>(data) {
+                                Ok(chunk) => {
                                     if let Some(choices) = chunk.choices {
                                         for choice in choices {
                                             if let Some(delta) = choice.delta {
@@ -190,6 +198,14 @@ impl MinimaxClient {
                                         }
                                     }
                                 }
+                                Err(e) => {
+                                    let preview = if data.len() > 200 {
+                                        format!("{}...", &data[..200])
+                                    } else {
+                                        data.to_string()
+                                    };
+                                    log::error!("[MiniMax] SSE parse error: {}, data: {}", e, preview);
+                                }
                             }
                         }
                     }
@@ -198,6 +214,12 @@ impl MinimaxClient {
                     return Err(LLMError::Network(e));
                 }
             }
+        }
+
+        // Flush any remaining buffer (incomplete event at end of stream)
+        let remaining = buffer.trim().to_string();
+        if !remaining.is_empty() {
+            log::warn!("[MiniMax] unprocessed stream tail ({} chars): {}", remaining.len(), remaining);
         }
 
         Ok(ChatResponse {

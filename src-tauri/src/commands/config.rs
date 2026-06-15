@@ -35,7 +35,7 @@ pub struct ChatConfig {
     pub window_height: u32,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct LLMConfigData {
     pub provider: String,
     pub deepseek: ProviderConfig,
@@ -75,7 +75,7 @@ impl Default for ProviderConfig {
     }
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct MinimaxConfig {
     pub api_key: String,
     pub model: String,

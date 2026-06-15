@@ -27,6 +27,17 @@ const messagesContainer = ref<HTMLElement | null>(null)
 const chatWindow = getCurrentWebviewWindow()
 const currentCharacter = ref('Bongo Cat')
 const characterAvatar = ref('')
+const hoveredMsgId = ref<string | null>(null)
+
+function isLatestAssistant(msg: ChatMessage): boolean {
+  const msgList = chatStore.messages
+  for (let i = msgList.length - 1; i >= 0; i--) {
+    if (msgList[i].role === 'assistant' && !(msgList[i] as any).isDivider) {
+      return msgList[i].id === msg.id
+    }
+  }
+  return false
+}
 
 // 历史消息加载相关
 const loadedDates = ref<string[]>([]) // 已加载的日期
@@ -109,17 +120,26 @@ async function loadMoreHistory() {
         timestamp: new Date(oldestDate).getTime(),
         isDivider: true
       }
-      
-      // 将历史消息插入到当前消息列表前面
-      const historyMessages = [
-        dateDivider,
-        ...dayChat.messages.map((msg: any) => ({
+
+      // 将历史消息插入到当前消息列表前面，加载 TTS meta
+      const historyMessages = [dateDivider]
+      for (const msg of dayChat.messages) {
+        const mapped: any = {
           id: msg.id,
           role: msg.role as 'user' | 'assistant',
           content: msg.content,
-          timestamp: msg.timestamp
-        }))
-      ]
+          timestamp: msg.timestamp,
+        }
+        if (msg.role === 'assistant') {
+          try {
+            const meta = await invoke<any>('get_tts_meta', { msgId: msg.id, date: oldestDate })
+            if (meta?.audio_files?.length) {
+              mapped.tts_meta = { date: oldestDate, audio_files: meta.audio_files }
+            }
+          } catch { /* meta not found, skip */ }
+        }
+        historyMessages.push(mapped)
+      }
       
       chatStore.messages.unshift(...historyMessages)
       loadedDates.value.push(oldestDate)
@@ -242,23 +262,35 @@ function formatTime(timestamp: number): string {
         </div>
         
         <!-- 普通消息 -->
-        <div v-else class="message-wrapper" :class="msg.role">
+        <div
+          v-else
+          class="message-wrapper"
+          :class="msg.role"
+          @mouseenter="hoveredMsgId = msg.id"
+          @mouseleave="hoveredMsgId = null"
+        >
           <div v-if="msg.role === 'assistant'" class="character-avatar">
             <img v-if="characterAvatar" :src="characterAvatar" alt="avatar">
             <span v-else class="avatar-emoji">🐱</span>
           </div>
-          
+
           <div class="message-bubble">
             <div class="message-content">{{ msg.content }}</div>
             <div class="message-time">
               {{ formatTime(msg.timestamp) }}
-              <span
-                v-if="msg.tts_meta?.audio_files?.length"
-                class="tts-replay-icon"
-                @click="replayTTS(msg)"
-                title="重放TTS"
-              >
-                🔊
+              <span v-if="hoveredMsgId === msg.id" class="msg-actions">
+                <span
+                  v-if="msg.tts_meta?.audio_files?.length"
+                  class="msg-action-btn"
+                  @click="replayTTS(msg)"
+                  title="重放 TTS"
+                >🔊</span>
+                <span
+                  v-if="msg.role === 'assistant' && isLatestAssistant(msg)"
+                  class="msg-action-btn"
+                  @click="chatStore.retryMessage(msg)"
+                  title="重新生成"
+                >🔄</span>
               </span>
             </div>
           </div>
@@ -518,6 +550,23 @@ function formatTime(timestamp: number): string {
   opacity: 0.6;
   margin-top: 4px;
   text-align: right;
+}
+
+.msg-actions {
+  margin-left: 6px;
+  display: inline-flex;
+  gap: 4px;
+}
+
+.msg-action-btn {
+  cursor: pointer;
+  font-size: 13px;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+
+.msg-action-btn:hover {
+  opacity: 1;
 }
 
 .message-bubble.loading {

@@ -41,6 +41,17 @@ export const useChatStore = defineStore('chat', () => {
   // Stream listener reference for cleanup
   let unlistenChunkRef: (() => void) | null = null
 
+  // ── Retry queue for failed message saves ──────────────────────────
+  // If save_chat_message fails (e.g. broken Tauri bridge, disk error),
+  // we retry once then queue. The queue is flushed when the next save
+  // succeeds, so no message is permanently lost.
+  const pendingSaves: ChatMessage[] = []
+  const MAX_RETRY_DELAY = 500
+
+  function sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms))
+  }
+
   // Load config
   async function loadConfig() {
     try {
@@ -52,8 +63,8 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  // Save message to memory
-  async function saveMessageToMemory(message: ChatMessage) {
+  // Save a single message (with retry)
+  async function trySaveOne(message: ChatMessage): Promise<boolean> {
     try {
       await invoke('save_chat_message', {
         characterId: configStore.currentCharacterId,
@@ -64,21 +75,58 @@ export const useChatStore = defineStore('chat', () => {
           timestamp: message.timestamp,
         },
       })
-    } catch (err) {
-      console.error('Failed to save message to memory:', err)
+      return true
+    } catch {
+      return false
     }
+  }
+
+  // Flush all queued saves; returns ones that still failed
+  async function flushPendingSaves(): Promise<ChatMessage[]> {
+    const stillFailed: ChatMessage[] = []
+    for (const msg of pendingSaves) {
+      const ok = await trySaveOne(msg)
+      if (!ok) stillFailed.push(msg)
+    }
+    return stillFailed
+  }
+
+  // Save message to memory with retry + queue fallback
+  async function saveMessageToMemory(message: ChatMessage) {
+    // Attempt 1: immediate
+    if (await trySaveOne(message)) {
+      // Success — also try to flush any previously queued messages
+      const failed = await flushPendingSaves()
+      pendingSaves.length = 0
+      if (failed.length > 0) {
+        pendingSaves.push(...failed)
+        console.warn(`[chat] ${failed.length} queued messages still failed to save`)
+      }
+      return
+    }
+
+    // Attempt 2: retry after delay
+    await sleep(MAX_RETRY_DELAY)
+    if (await trySaveOne(message)) {
+      const failed = await flushPendingSaves()
+      pendingSaves.length = 0
+      if (failed.length > 0) {
+        pendingSaves.push(...failed)
+        console.warn(`[chat] ${failed.length} queued messages still failed to save`)
+      }
+      return
+    }
+
+    // Both attempts failed — queue for later
+    pendingSaves.push(message)
+    console.warn(`[chat] message queued for retry (queue size: ${pendingSaves.length})`)
   }
   
   // Build system prompt with emotion tag requirement
-  async function buildSystemPrompt(basePrompt: string | null): Promise<string | null> {
-    // Check if TTS emotion auto is enabled
-    const config = await invoke<any>('load_config')
-    const emotionAuto = config.tts?.emotion_auto ?? false
-    
+  function buildSystemPrompt(basePrompt: string | null, emotionAuto: boolean): string | null {
     if (!emotionAuto || !basePrompt) {
       return basePrompt
     }
-    
     // Append emotion prompt
     return basePrompt + '\n\n' + getEmotionPrompt()
   }
@@ -107,8 +155,9 @@ export const useChatStore = defineStore('chat', () => {
       if (container) container.scrollTop = container.scrollHeight
     })
 
-    // Save to memory
-    await saveMessageToMemory(userMessage)
+    // NOTE: user message is NOT saved to file yet.
+    // It will only be persisted together with the assistant response
+    // after a successful LLM call, keeping the file consistent.
 
     // Trim messages if needed
     if (messages.value.length > maxMessages.value) {
@@ -116,13 +165,12 @@ export const useChatStore = defineStore('chat', () => {
     }
 
     try {
-      // Load config and check settings
-      const config = await invoke<any>('load_config')
-      const isStreaming = config.llm?.stream ?? false
-      const emotionAuto = config.tts?.emotion_auto ?? false
-      
+      // Read from cached configStore — avoids redundant IPC
+      const isStreaming = configStore.llmConfig?.stream ?? false
+      const emotionAuto = configStore.ttsConfig?.emotion_auto ?? false
+
       // Build system prompt with emotion requirement if enabled
-      const systemPrompt = await buildSystemPrompt(null)
+      const systemPrompt = buildSystemPrompt(null, emotionAuto)
 
       if (isStreaming) {
         // Streaming mode: listen for chunks
@@ -154,23 +202,28 @@ export const useChatStore = defineStore('chat', () => {
         
         console.log('[chat] setting up stream listener');
         // Listen for chunks
-        unlistenChunkRef = await listen<[string, string]>('chat_stream_chunk', (event) => {
+        unlistenChunkRef = await listen<[string, string]>('chat_stream_chunk', async (event) => {
           const [, chunk] = event.payload
           console.log('[chat] stream chunk received, len=', chunk.length, 'chunk=', JSON.stringify(chunk));
           streamingContent += chunk
           chunkCount++
-          
+
           if (emotionAuto) {
             const { context, result } = parseEmotionChunk(emotionParser, chunk)
             emotionParser = context
-            
+
             if (result.emotion) {
               ttsStore.setEmotion(result.emotion)
             }
-            
-            // TTS: use result.text (emotion-stripped) if available, else raw chunk
-            ttsStore.speakStream(result.text || chunk)
-            
+
+            // TTS: fire-and-forget — do NOT await, so UI updates are not blocked
+            const spokenText = result.text || chunk
+            ttsStore.speakStream(spokenText).then(audioPath => {
+              if (audioPath) {
+                streamingAudioFiles.push({ seq: streamingAudioFiles.length, path: audioPath.replace(/^file:\/\//, ''), text: spokenText })
+              }
+            })
+
             // Display: accumulate only result.text (emotion stripped), fall back to raw chunk
             if (result.text) {
               pureTextContent += result.text
@@ -179,7 +232,11 @@ export const useChatStore = defineStore('chat', () => {
             }
           } else {
             pureTextContent += chunk
-            ttsStore.speakStream(chunk)
+            ttsStore.speakStream(chunk).then(audioPath => {
+              if (audioPath) {
+                streamingAudioFiles.push({ seq: streamingAudioFiles.length, path: audioPath.replace(/^file:\/\//, ''), text: chunk })
+              }
+            })
           }
           
           // Update message display with accumulated text
@@ -232,7 +289,8 @@ export const useChatStore = defineStore('chat', () => {
               }
             }
             
-            // Save to memory with pure text
+            // Save both messages to memory together — only after success
+            await saveMessageToMemory(userMessage)
             await saveMessageToMemory(messages.value[msgIndex])
           }
 
@@ -280,12 +338,29 @@ export const useChatStore = defineStore('chat', () => {
           if (container) container.scrollTop = container.scrollHeight
         })
 
-        // Save to memory
+        // Save both messages to memory together — only after success
+        await saveMessageToMemory(userMessage)
         await saveMessageToMemory(assistantMessage)
 
-        // Trigger TTS with emotion if enabled
+        // Trigger TTS with emotion if enabled — collect audio path for replay
         if (emotionAuto && ttsStore.emotionAutoEnabled) {
-          ttsStore.speakWithEmotion(finalContent, ttsStore.getEmotion())
+          const audioPath = await ttsStore.speakWithEmotion(finalContent, ttsStore.getEmotion())
+          if (audioPath) {
+            const today = new Date().toISOString().split('T')[0]
+            assistantMessage.tts_meta = {
+              date: today,
+              audio_files: [{ seq: 0, path: audioPath.replace(/^file:\/\//, ''), text: finalContent }],
+            }
+            try {
+              await invoke('save_tts_meta', {
+                msgId: assistantMessage.id,
+                date: today,
+                audioFiles: assistantMessage.tts_meta.audio_files,
+              })
+            } catch (err) {
+              console.error('[TTS] save meta error:', err)
+            }
+          }
         }
 
         // Trim again
@@ -313,14 +388,29 @@ export const useChatStore = defineStore('chat', () => {
   // Load today's chat from file
   async function loadHistory() {
     try {
+      const today = new Date().toISOString().split('T')[0]
       const todayChat = await invoke<any>('get_today_chat', { characterId: configStore.currentCharacterId })
       if (todayChat && todayChat.messages) {
-        messages.value = todayChat.messages.map((msg: any) => ({
-          id: msg.id || `msg_${msg.timestamp}`,
-          role: msg.role,
-          content: msg.content,
-          timestamp: msg.timestamp,
-        }))
+        const msgs: ChatMessage[] = []
+        for (const msg of todayChat.messages) {
+          const mapped: ChatMessage = {
+            id: msg.id || `msg_${msg.timestamp}`,
+            role: msg.role,
+            content: msg.content,
+            timestamp: msg.timestamp,
+          }
+          // Load TTS meta for replay
+          if (msg.role === 'assistant') {
+            try {
+              const meta = await invoke<any>('get_tts_meta', { msgId: mapped.id, date: today })
+              if (meta?.audio_files?.length) {
+                mapped.tts_meta = { date: today, audio_files: meta.audio_files }
+              }
+            } catch { /* meta not found, skip */ }
+          }
+          msgs.push(mapped)
+        }
+        messages.value = msgs
       } else {
         messages.value = []
       }
@@ -370,6 +460,32 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  // Retry: remove the last user+assistant pair and resend the user message
+  async function retryMessage(assistantMsg: ChatMessage) {
+    // Find the preceding user message
+    const idx = messages.value.findIndex(m => m.id === assistantMsg.id)
+    if (idx <= 0) return
+
+    const userMsg = messages.value[idx - 1]
+    if (userMsg.role !== 'user') return
+
+    // Remove from UI
+    messages.value.splice(idx - 1, 2)
+
+    // Remove from today's chat file
+    try {
+      await invoke('remove_messages_by_id', {
+        characterId: configStore.currentCharacterId,
+        messageIds: [userMsg.id, assistantMsg.id],
+      })
+    } catch (err) {
+      console.error('[chat] retry: failed to remove messages from file:', err)
+    }
+
+    // Resend
+    await sendMessage(userMsg.content)
+  }
+
   // Clear all chats
   async function clearAllChats() {
     try {
@@ -395,5 +511,6 @@ export const useChatStore = defineStore('chat', () => {
     exportChatsMarkdown,
     getMemoryInfo,
     clearAllChats,
+    retryMessage,
   }
 })

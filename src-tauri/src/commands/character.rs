@@ -299,6 +299,38 @@ pub async fn trigger_profile_update(character_id: String, llm_manager: Arc<LLMMa
                 .collect();
         }
 
+        // ── Compress profile fields to prevent unbounded growth ──────
+        const MAX_TRAITS: usize = 5;
+        const MAX_PREFS: usize = 10;
+        const MAX_DATES: usize = 10;
+        const MAX_INTERACTIONS: usize = 10;
+        const MAX_MEMORIES: usize = 10;
+
+        if profile.traits.len() > MAX_TRAITS {
+            profile.traits.truncate(MAX_TRAITS);
+        }
+        if profile.preferences.len() > MAX_PREFS {
+            // Keep first N entries (HashMap order is insertion order, newest first)
+            let kept: HashMap<String, String> = profile.preferences
+                .into_iter()
+                .take(MAX_PREFS)
+                .collect();
+            profile.preferences = kept;
+        }
+        if profile.important_dates.len() > MAX_DATES {
+            let kept: HashMap<String, String> = profile.important_dates
+                .into_iter()
+                .take(MAX_DATES)
+                .collect();
+            profile.important_dates = kept;
+        }
+        if profile.recent_interactions.len() > MAX_INTERACTIONS {
+            profile.recent_interactions.truncate(MAX_INTERACTIONS);
+        }
+        if profile.special_memories.len() > MAX_MEMORIES {
+            profile.special_memories.truncate(MAX_MEMORIES);
+        }
+
         profile.last_updated = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
         profile.last_update_conversation_count = actual_count;
 
