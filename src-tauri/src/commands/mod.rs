@@ -5,6 +5,7 @@ pub mod character;
 pub mod config;
 pub mod facts;
 pub mod memory;
+pub mod model3d;
 pub mod prompt;
 pub mod scheduler;
 pub mod tts;
@@ -29,6 +30,7 @@ pub use memory::{
     get_character_memory_info, get_memory_info
 };
 
+pub use model3d::*;
 pub use prompt::*;
 pub use scheduler::{start_scheduler, trigger_weekly_summary, trigger_monthly_summary, trigger_quarter, trigger_year};
 pub use window::{

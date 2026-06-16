@@ -6,10 +6,12 @@ pub mod window_follower;
 
 // Explicit imports to avoid glob re-export issues
 use commands::{
-    check_llm_available, clear_chat_history, clear_all_chats, export_all_chats, export_chats_markdown,
+    add_3d_model, add_model_motion, check_llm_available, clear_chat_history, clear_all_chats,
+    export_all_chats, export_chats_markdown,
     get_chat_by_date, get_chat_dates, get_chat_history, get_llm_config, get_main_window_position,
     get_memory_info, get_monthly_summaries, get_today_chat, get_weekly_summaries,
-    hide_chat_window, load_config, remove_messages_by_id, save_chat_message, save_config, save_monthly_summary,
+    hide_chat_window, list_3d_models, load_config, remove_3d_model, remove_messages_by_id,
+    save_chat_message, save_config, save_monthly_summary,
     save_weekly_summary, send_message, send_message_stream, set_system_prompt, show_chat_window, toggle_chat_window,
     set_chat_always_on_top, activate_window, exit_app, relaunch_app,
     trigger_monthly_summary, trigger_weekly_summary, trigger_quarter, trigger_year,
@@ -92,7 +94,11 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(generate_handler![
+            add_3d_model,
+            add_model_motion,
+            list_3d_models,
             load_config,
+            remove_3d_model,
             save_config,
             get_llm_config,
             send_message,
