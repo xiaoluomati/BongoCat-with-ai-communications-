@@ -78,8 +78,8 @@ importers:
         specifier: ^2.3.0
         version: 2.3.0
       three:
-        specifier: ^0.184.0
-        version: 0.184.0
+        specifier: ^0.169.0
+        version: 0.169.0
       vue:
         specifier: ^3.5.16
         version: 3.5.16(typescript@5.6.3)
@@ -3168,8 +3168,8 @@ packages:
   tauri-plugin-macos-permissions-api@2.3.0:
     resolution: {integrity: sha512-pZp0jmDySysBqrGueknd1a7Rr4XEO9aXpMv9TNrT2PDHP0MSH20njieOagsFYJ5MCVb8A+wcaK0cIkjUC2dOww==}
 
-  three@0.184.0:
-    resolution: {integrity: sha512-wtTRjG92pM5eUg/KuUnHsqSAlPM296brTOcLgMRqEeylYTh/CdtvKUvCyyCQTzFuStieWxvZb8mVTMvdPyUpxg==}
+  three@0.169.0:
+    resolution: {integrity: sha512-Ed906MA3dR4TS5riErd4QBsRGPcx+HBDX2O5yYE5GqJeFQTPU+M56Va/f/Oph9X7uZo3W3o4l2ZhBZ6f6qUv0w==}
 
   throttle-debounce@5.0.2:
     resolution: {integrity: sha512-B71/4oyj61iNH0KeCamLuE2rmKuTO5byTOSVwECM5FA7TiAiAW+UqTKZ9ERueC4qvgSttUhdmq1mXC3kJqGX7A==}
@@ -6593,7 +6593,7 @@ snapshots:
     dependencies:
       '@tauri-apps/api': 2.5.0
 
-  three@0.184.0: {}
+  three@0.169.0: {}
 
   throttle-debounce@5.0.2: {}
 
