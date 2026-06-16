@@ -92,22 +92,28 @@ export class ModelLoader {
       const tex = (mat as any)[key] as THREE.Texture | null
       if (!tex || !tex.image) continue
 
-      // Try to find a matching blob URL from the cache
-      // Extract filename from what MMDLoader tried to load
       const src = tex.image instanceof HTMLImageElement ? tex.image.src : ''
       if (!src) continue
 
-      // Try to match by filename
+      console.log('[loader] texture src:', key, src.substring(0, 100))
+      let matched = false
+
       for (const [name, blobUrl] of this.textureCache) {
-        if (src.includes(encodeURIComponent(name)) || src.includes(name) || src.endsWith('/' + name)) {
-          console.log('[loader] replacing texture:', name)
+        const encoded = encodeURIComponent(name)
+        if (src.includes(encoded) || src.includes(name) || src.toLowerCase().endsWith('/' + name.toLowerCase())) {
+          console.log('[loader] MATCHED, replacing with blob:', name)
           const newTex = new THREE.TextureLoader().load(blobUrl)
           newTex.wrapS = tex.wrapS
           newTex.wrapT = tex.wrapT
           newTex.flipY = tex.flipY
           ;(mat as any)[key] = newTex
+          matched = true
           break
         }
+      }
+      if (!matched) {
+        console.warn('[loader] NO MATCH for:', src.substring(0, 100))
+        console.log('[loader] cache keys:', [...this.textureCache.keys()].join(', '))
       }
     }
   }

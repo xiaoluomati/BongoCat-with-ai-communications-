@@ -63,6 +63,9 @@ async function refreshAndLoad(model3d: any) {
     status.value = 'loading'
     const list = await invoke<Model3DInfo[]>('list_3d_models')
     log(`backend returned ${list.length} models`)
+    if (list.length > 0) {
+      log(`first model: id=${list[0].id}, name=${list[0].name}, pmx_path=${list[0].pmx_path}`)
+    }
 
     if (list.length === 0) {
       status.value = 'init'
@@ -70,11 +73,13 @@ async function refreshAndLoad(model3d: any) {
     }
 
     store.setModels(list)
-    if (!store.currentModelId) store.selectModel(list[0].id)
+    // Force select the first model
+    store.selectModel(list[0].id)
+    log(`after select: currentModelId=${store.currentModelId}, pmxPath=${store.currentPmxPath}`)
 
     const pmxPath = store.currentPmxPath
-    log(`current model path: ${pmxPath || '(null)'}`)
     if (!pmxPath) {
+      log('ERROR: currentPmxPath is null despite having models!')
       status.value = 'init'
       return
     }
