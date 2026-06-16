@@ -22,8 +22,12 @@ export function createScene(canvas: HTMLCanvasElement): SceneContext {
     0.1,
     100,
   )
-  camera.position.set(0, 1.5, 5)
-  camera.lookAt(0, 0, 0)
+  // MMD models have origin at feet; look at upper body (Y=10 in MMD units)
+  camera.position.set(0, 10, 20)
+  camera.lookAt(0, 10, 0)
+
+  // Match renderer size to canvas
+  renderer.setSize(canvas.clientWidth, canvas.clientHeight)
 
   const ambient = new THREE.AmbientLight(0xffffff, 0.8)
   scene.add(ambient)

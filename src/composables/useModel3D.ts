@@ -18,11 +18,17 @@ export function useModel3D() {
   let model: THREE.SkinnedMesh | null = null
   let anim: AnimationState | null = null
   let interaction: ModelInteraction | null = null
+  let resizeObserver: ResizeObserver | null = null
   const loader = new ModelLoader()
 
   async function init(canvas: HTMLCanvasElement) {
     ctx = createScene(canvas)
-    window.addEventListener('resize', onResize)
+    // Use ResizeObserver for reliable resize detection in Tauri windows
+    resizeObserver = new ResizeObserver(() => {
+      if (!ctx) return
+      resizeScene(ctx, canvas.clientWidth, canvas.clientHeight)
+    })
+    resizeObserver.observe(canvas.parentElement || canvas)
   }
 
   function onResize() {
@@ -98,6 +104,8 @@ export function useModel3D() {
 
   function destroy() {
     unloadModel()
+    resizeObserver?.disconnect()
+    resizeObserver = null
     ctx?.renderer.dispose()
     ctx = null
     window.removeEventListener('resize', onResize)

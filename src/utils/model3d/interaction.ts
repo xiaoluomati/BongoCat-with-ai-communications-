@@ -39,8 +39,8 @@ export class ModelInteraction {
 
   private onWheel = (e: WheelEvent) => {
     e.preventDefault()
-    this.cameraDistance += e.deltaY * 0.01
-    this.cameraDistance = Math.max(2, Math.min(10, this.cameraDistance))
+    this.cameraDistance += e.deltaY * 0.02
+    this.cameraDistance = Math.max(5, Math.min(30, this.cameraDistance))
     this.camera.position.z = this.cameraDistance
   }
 
