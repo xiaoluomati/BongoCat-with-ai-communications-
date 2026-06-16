@@ -10,6 +10,7 @@ import TTS from './components/tts/index.vue'
 import LLM from './components/llm/index.vue'
 import Memory from './components/memory/index.vue'
 import Character from './components/character/index.vue'
+import Model3D from './components/model3d/index.vue'
 import Profile from './components/profile/index.vue'
 
 import { useAppStore } from '@/stores/app'
@@ -61,6 +62,11 @@ const menus = computed(() => [
     label: '用户画像',
     icon: 'i-solar:user-id-linear',
     component: Profile,
+  },
+  {
+    label: '3D 模型',
+    icon: 'i-solar:widget-3-linear',
+    component: Model3D,
   },
 ])
 </script>
