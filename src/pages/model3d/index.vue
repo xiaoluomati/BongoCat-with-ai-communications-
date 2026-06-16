@@ -1,112 +1,70 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
-import { useModel3D, type Status } from '@/composables/useModel3D'
+import { useModel3D } from '@/composables/useModel3D'
 import { useModel3DStore } from '@/stores/model3d'
 
-const appWindow = getCurrentWebviewWindow()
 const store = useModel3DStore()
 const { status, progress, error, init, loadCurrentModel, destroy } = useModel3D()
+const appWindow = getCurrentWebviewWindow()
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
-const isReady = ref(false)
+let unlisten: UnlistenFn | null = null
 
 onMounted(async () => {
   if (!canvasRef.value) return
   await init(canvasRef.value)
-  isReady.value = true
+
+  // Load initial model
+  await loadModelsAndShow()
+
+  // Listen for cross-window updates
+  unlisten = await listen('model3d-updated', async () => {
+    await loadModelsAndShow()
+  })
+})
+
+onUnmounted(() => {
+  unlisten?.()
+  destroy()
+})
+
+async function loadModelsAndShow() {
+  // Reload from backend to get latest
+  const { invoke } = await import('@tauri-apps/api/core')
+  try {
+    const list = await invoke<any[]>('list_3d_models')
+    store.setModels(list)
+    if (!store.currentModelId && list.length > 0) {
+      store.selectModel(list[0].id)
+    }
+  } catch { /* ignore */ }
   if (store.currentPmxPath) {
     await loadCurrentModel()
   }
-})
-
-watch(() => store.currentPmxPath, async (path) => {
-  if (path && isReady.value) {
-    await loadCurrentModel()
-  }
-})
-
-onUnmounted(() => destroy())
-
-async function handleClose() {
-  await appWindow.hide()
 }
 </script>
 
 <template>
-  <div class="model3d-container">
-    <!-- Header -->
-    <div class="model3d-header" data-tauri-drag-region>
-      <span class="header-title">3D 模型</span>
-      <button class="header-close" @click="handleClose">&times;</button>
+  <div class="model3d-container" @mousedown="appWindow.startDragging()">
+    <div v-if="status === 'loading'" class="overlay">
+      <div class="spinner" />
+      <span>{{ progress }}%</span>
     </div>
-
-    <!-- Canvas area -->
-    <div class="canvas-area">
-      <!-- Loading -->
-      <div v-if="status === 'loading'" class="overlay">
-        <div class="spinner" />
-        <span>加载中... {{ progress }}%</span>
-      </div>
-
-      <!-- Error -->
-      <div v-else-if="status === 'error'" class="overlay">
-        <span class="error-text">加载失败: {{ error }}</span>
-      </div>
-
-      <!-- Empty -->
-      <div v-else-if="status === 'empty'" class="overlay">
-        <span class="empty-text">请在设置中导入 PMX 模型</span>
-      </div>
-
-      <canvas ref="canvasRef" id="model3dCanvas" />
+    <div v-else-if="status === 'error'" class="overlay">
+      <span class="error-text">{{ error }}</span>
     </div>
+    <canvas ref="canvasRef" id="model3dCanvas" />
   </div>
 </template>
 
 <style scoped>
 .model3d-container {
-  display: flex;
-  flex-direction: column;
+  width: 100%;
   height: 100vh;
-  background: transparent;
-}
-
-.model3d-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 6px 12px;
-  background: rgba(0, 0, 0, 0.3);
-  flex-shrink: 0;
-  height: 32px;
-}
-
-.header-title {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.6);
-  user-select: none;
-}
-
-.header-close {
-  background: none;
-  border: none;
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 18px;
-  cursor: pointer;
-  padding: 0 4px;
-  line-height: 1;
-  -webkit-app-region: no-drag;
-}
-
-.header-close:hover {
-  color: #fff;
-}
-
-.canvas-area {
-  flex: 1;
-  position: relative;
   overflow: hidden;
+  position: relative;
 }
 
 #model3dCanvas {
@@ -142,5 +100,4 @@ async function handleClose() {
 }
 
 .error-text { color: #e88; }
-.empty-text { color: #aaa; }
 </style>

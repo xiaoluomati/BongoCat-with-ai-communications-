@@ -2,13 +2,17 @@
 import { DeleteOutlined, PlusOutlined, PlayCircleOutlined } from '@ant-design/icons-vue'
 import { Button, Card, List, Modal, message, Spin } from 'ant-design-vue'
 import { invoke } from '@tauri-apps/api/core'
+import { emit } from '@tauri-apps/api/event'
 import { open } from '@tauri-apps/plugin-dialog'
 import { ref, onMounted, computed } from 'vue'
 import { useModel3DStore, type Model3DInfo } from '@/stores/model3d'
 
 const store = useModel3DStore()
 const loading = ref(false)
-const importName = ref('')
+
+function notify3DWindow() {
+  emit('model3d-updated', { currentId: store.currentModelId }).catch(() => {})
+}
 
 const models = computed(() => store.models)
 const currentId = computed(() => store.currentModelId)
@@ -46,6 +50,7 @@ async function handleImport() {
     await invoke<Model3DInfo>('add_3d_model', { name, sourcePath: file })
     message.success('模型导入成功')
     await loadModels()
+    notify3DWindow()
   } catch (e) {
     message.error('导入失败: ' + String(e))
   } finally {
@@ -66,6 +71,7 @@ async function handleDelete(model: Model3DInfo) {
         if (currentId.value === model.id) store.selectModel('')
         message.success('已删除')
         await loadModels()
+        notify3DWindow()
       } catch (e) {
         message.error('删除失败: ' + String(e))
       }
@@ -76,6 +82,7 @@ async function handleDelete(model: Model3DInfo) {
 function handleSelect(model: Model3DInfo) {
   store.selectModel(model.id)
   message.success(`已选择: ${model.name}`)
+  notify3DWindow()
 }
 
 async function handleAddMotion(model: Model3DInfo) {
