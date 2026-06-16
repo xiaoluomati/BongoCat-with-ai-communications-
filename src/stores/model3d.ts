@@ -4,9 +4,9 @@ import { ref, computed } from 'vue'
 export interface Model3DInfo {
   id: string
   name: string
-  pmxPath: string
+  pmx_path: string
   motions: Record<string, string>
-  addedAt: string
+  added_at: string
 }
 
 export const useModel3DStore = defineStore('model3d', () => {
@@ -19,7 +19,7 @@ export const useModel3DStore = defineStore('model3d', () => {
     models.value.find(m => m.id === currentModelId.value) ?? null,
   )
 
-  const currentPmxPath = computed(() => currentModel.value?.pmxPath ?? null)
+  const currentPmxPath = computed(() => currentModel.value?.pmx_path ?? null)
   const currentMotions = computed(() => currentModel.value?.motions ?? {})
 
   function setModels(list: Model3DInfo[]) {
