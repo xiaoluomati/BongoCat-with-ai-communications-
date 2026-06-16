@@ -8,9 +8,10 @@ const MAIN_WINDOW_LABEL: &str = "main";
 const CHAT_WINDOW_LABEL: &str = "chat";
 const PREFERENCE_WINDOW_LABEL: &str = "preference";
 const COMPREHENSIVE_WINDOW_LABEL: &str = "comprehensive_function";
+const MODEL3D_WINDOW_LABEL: &str = "model3d";
 
 /// 所有需要管理的窗口标签（除了主窗口，主窗口永远置顶）
-const MANAGED_WINDOWS: &[&str] = &[CHAT_WINDOW_LABEL, PREFERENCE_WINDOW_LABEL, COMPREHENSIVE_WINDOW_LABEL];
+const MANAGED_WINDOWS: &[&str] = &[CHAT_WINDOW_LABEL, PREFERENCE_WINDOW_LABEL, COMPREHENSIVE_WINDOW_LABEL, MODEL3D_WINDOW_LABEL];
 
 /// 激活指定窗口，确保它在最前面，同时处理其他窗口的层级
 /// 注意：主窗口永远保持置顶，不参与此管理
@@ -180,4 +181,22 @@ pub fn set_chat_always_on_top(app: tauri::AppHandle, always_on_top: bool) -> Res
         .map_err(|e| e.to_string())?;
 
     Ok(())
+}
+
+/// Toggle 3D model window
+#[tauri::command]
+pub fn toggle_model3d_window(app: tauri::AppHandle) -> Result<bool, String> {
+    let window = app
+        .get_webview_window(MODEL3D_WINDOW_LABEL)
+        .ok_or("Model3D window not found")?;
+
+    if window.is_visible().map_err(|e| e.to_string())? {
+        window.hide().map_err(|e| e.to_string())?;
+        Ok(false)
+    } else {
+        window.set_always_on_top(true).map_err(|e| e.to_string())?;
+        window.show().map_err(|e| e.to_string())?;
+        window.set_focus().map_err(|e| e.to_string())?;
+        Ok(true)
+    }
 }

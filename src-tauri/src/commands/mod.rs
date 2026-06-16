@@ -36,6 +36,7 @@ pub use scheduler::{start_scheduler, trigger_weekly_summary, trigger_monthly_sum
 pub use window::{
     activate_window, get_main_window_position, 
     show_chat_window, hide_chat_window, toggle_chat_window, set_chat_always_on_top,
+    toggle_model3d_window,
     exit_app, relaunch_app
 };
 
