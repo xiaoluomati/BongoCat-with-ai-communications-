@@ -70,16 +70,25 @@ pub fn add_3d_model(name: String, source_path: String) -> Result<Model3DInfo, St
     let pmx_dest = model_dir.join(&pmx_name);
     fs::copy(&source_path, &pmx_dest).map_err(|e| e.to_string())?;
 
-    // Copy texture folder if it exists alongside the PMX
+    // Copy ALL other files from the source directory (textures, VMD, etc.)
     let source_dir = std::path::Path::new(&source_path)
         .parent()
         .unwrap_or(std::path::Path::new("."));
-    for tex_dir_name in &["tex", "textures", "texture"] {
-        let tex_src = source_dir.join(tex_dir_name);
-        if tex_src.exists() && tex_src.is_dir() {
-            let tex_dest = model_dir.join(tex_dir_name);
-            copy_dir_recursive(&tex_src, &tex_dest)?;
-            break;
+    for entry in fs::read_dir(source_dir).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let src_path = entry.path();
+        let file_name = entry.file_name();
+
+        // Skip the PMX file itself (already copied above)
+        if src_path == std::path::Path::new(&source_path) {
+            continue;
+        }
+
+        let dest_path = model_dir.join(&file_name);
+        if src_path.is_dir() {
+            copy_dir_recursive(&src_path, &dest_path)?;
+        } else {
+            fs::copy(&src_path, &dest_path).map_err(|e| e.to_string())?;
         }
     }
 
