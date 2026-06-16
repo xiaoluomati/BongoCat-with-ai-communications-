@@ -22,10 +22,9 @@ export function createScene(canvas: HTMLCanvasElement): SceneContext {
     0.1,
     100,
   )
-  // MMD models have origin at feet (~10 MMD units = ~1.25m height)
-  // Position camera further back and higher to see full body
-  camera.position.set(0, 10, 45)
-  camera.lookAt(0, 11, 0)
+  // MMD models: ~20 units tall, origin at feet. Frame full body.
+  camera.position.set(0, 10, 25)
+  camera.lookAt(0, 10, 0)
 
   // Match renderer size to canvas physical size
   renderer.setSize(canvas.clientWidth, canvas.clientHeight, false)

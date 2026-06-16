@@ -118,7 +118,6 @@ async function refreshAndLoad(model3d: any) {
 <style scoped>
 .model3d-container {
   position: fixed; inset: 0; overflow: hidden;
-  background: rgba(0,0,0,0.05);
 }
 #model3dCanvas { width: 100%; height: 100%; display: block; }
 .overlay {
