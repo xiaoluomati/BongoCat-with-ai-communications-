@@ -33,7 +33,10 @@ export function useModel3D() {
 
   async function loadCurrentModel() {
     const path = store.currentPmxPath
-    if (!path || !ctx) return
+    if (!path || !ctx) {
+      console.warn('[useModel3D] loadCurrentModel: no path or no context')
+      return
+    }
 
     status.value = 'loading'
     progress.value = 0
@@ -42,10 +45,38 @@ export function useModel3D() {
     try {
       unloadModel()
 
+      console.log('[useModel3D] loading model from:', path)
       model = await loader.loadModel(path, (pct) => {
         progress.value = pct
       })
+      console.log('[useModel3D] model loaded, adding to scene')
       ctx.scene.add(model)
+
+      const mixer = new THREE.AnimationMixer(model)
+      anim = createAnimationState(mixer)
+      anim.breatheEnabled = store.breatheEnabled
+      anim.proceduralEnabled = store.proceduralEnabled
+
+      // Load VMD motions
+      const motions = store.currentMotions
+      for (const [name, vmdPath] of Object.entries(motions)) {
+        try {
+          console.log(`[useModel3D] loading motion: ${name} from ${vmdPath}`)
+          const clip = await loader.loadMotion(vmdPath)
+          anim.actionMap.set(name, clip)
+          if (name === 'idle') playMotion(anim, 'idle')
+        } catch (e) {
+          console.warn(`[useModel3D] failed to load motion ${name}:`, e)
+        }
+      }
+
+      startRenderLoop(anim, model, ctx.renderer, ctx.scene, ctx.camera)
+
+      interaction?.destroy()
+      interaction = new ModelInteraction(model, ctx.camera, ctx.renderer.domElement)
+
+      status.value = 'ready'
+      console.log('[useModel3D] model ready')
 
       const mixer = new THREE.AnimationMixer(model)
       anim = createAnimationState(mixer)
@@ -71,8 +102,11 @@ export function useModel3D() {
 
       status.value = 'ready'
     } catch (e) {
-      error.value = String(e)
+      const msg = e instanceof Error ? e.message : String(e)
+      console.error('[useModel3D] loadCurrentModel error:', msg, e)
+      error.value = msg
       status.value = 'error'
+      throw e // re-throw so caller can see the error
     }
   }
 
