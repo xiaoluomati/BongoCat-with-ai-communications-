@@ -22,12 +22,14 @@ export function createScene(canvas: HTMLCanvasElement): SceneContext {
     0.1,
     100,
   )
-  // MMD models have origin at feet; look at upper body (Y=10 in MMD units)
-  camera.position.set(0, 10, 20)
-  camera.lookAt(0, 10, 0)
+  // MMD models have origin at feet (~10 MMD units = ~1.25m height)
+  // Position camera further back and higher to see full body
+  camera.position.set(0, 10, 45)
+  camera.lookAt(0, 11, 0)
 
-  // Match renderer size to canvas
-  renderer.setSize(canvas.clientWidth, canvas.clientHeight)
+  // Match renderer size to canvas physical size
+  renderer.setSize(canvas.clientWidth, canvas.clientHeight, false)
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
 
   const ambient = new THREE.AmbientLight(0xffffff, 0.8)
   scene.add(ambient)
@@ -40,7 +42,9 @@ export function createScene(canvas: HTMLCanvasElement): SceneContext {
 }
 
 export function resizeScene(ctx: SceneContext, width: number, height: number) {
-  ctx.renderer.setSize(width, height)
+  if (width === 0 || height === 0) return
+  ctx.renderer.setSize(width, height, false)
+  ctx.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
   ctx.camera.aspect = width / height
   ctx.camera.updateProjectionMatrix()
 }
