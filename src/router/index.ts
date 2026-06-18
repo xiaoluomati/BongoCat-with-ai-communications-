@@ -5,7 +5,6 @@ import { createRouter, createWebHashHistory } from 'vue-router'
 import Chat from '../pages/chat/index.vue'
 import Comprehensive_Function from '../pages/comprehensive_function/index.vue'
 import Main from '../pages/main/index.vue'
-import Model3D from '../pages/model3d/index.vue'
 import Preference from '../pages/preference/index.vue'
 
 const routes: Readonly<RouteRecordRaw[]> = [
@@ -27,7 +26,7 @@ const routes: Readonly<RouteRecordRaw[]> = [
   },
   {
     path: '/model3d',
-    component: Model3D,
+    component: () => import('../pages/model3d/index.vue'),
   },
 ]
 
