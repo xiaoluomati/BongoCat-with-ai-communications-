@@ -42,18 +42,6 @@
         "minHeight": 600
       },
       {
-        "label": "model3d",
-        "url": "index.html/#/model3d",
-        "shadow": false,
-        "alwaysOnTop": true,
-        "transparent": true,
-        "decorations": false,
-        "width": 400,
-        "height": 600,
-        "visible": false,
-        "skipTaskbar": true
-      },
-      {
         "label": "chat",
         "url": "index.html/#/chat",
         "shadow": false,

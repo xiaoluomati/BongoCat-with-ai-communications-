@@ -24,10 +24,6 @@ const routes: Readonly<RouteRecordRaw[]> = [
     path: '/chat',
     component: Chat,
   },
-  {
-    path: '/model3d',
-    component: () => import('../pages/model3d/index.vue'),
-  },
 ]
 
 const router = createRouter({

@@ -15,6 +15,7 @@ export interface CatStore {
     opacity: number
     radius: number
   }
+  displayMode: '2d' | '3d'
 }
 
 export const useCatStore = defineStore('cat', () => {
@@ -59,6 +60,8 @@ export const useCatStore = defineStore('cat', () => {
     radius: 0,
   })
 
+  const displayMode = ref<'2d' | '3d'>('2d')
+
   const init = () => {
     if (migrated.value) return
 
@@ -79,6 +82,7 @@ export const useCatStore = defineStore('cat', () => {
     migrated,
     model,
     window,
+    displayMode,
     init,
   }
 })

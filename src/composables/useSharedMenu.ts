@@ -57,12 +57,6 @@ export function useSharedMenu() {
   }
 
   const getSharedMenuItems = async (): Promise<any[]> => {
-    const model3dItem = await MenuItem.new({
-      id: 'model3d',
-      text: '🧊 3D 模型',
-      action: async () => { await invoke('toggle_model3d_window') },
-    })
-
     const chatItem = await MenuItem.new({
       id: 'chat',
       text: '💬 聊天',
@@ -115,7 +109,7 @@ export function useSharedMenu() {
 
     const sep = await PredefinedMenuItem.new({ item: 'Separator' })
 
-    return [model3dItem, chatItem, compItem, prefItem, toggleItem, sep, passItem, scaleSubmenu, opacitySubmenu]
+    return [chatItem, compItem, prefItem, toggleItem, sep, passItem, scaleSubmenu, opacitySubmenu]
   }
 
   const getSharedMenu = async () => {
