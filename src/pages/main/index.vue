@@ -103,9 +103,9 @@ watch([modelStore.pressedKeys, stickActive], ([keys, stickActive]) => {
   handleKeyChange(false, stickActive.right || hasRight)
 }, { deep: true })
 
-watch(() => catStore.window.visible, async (value) => {
+watch(() => catStore.window.visible, (value) => {
   value ? showWindow() : hideWindow()
-})
+}, { immediate: true })
 
 watch(() => catStore.window.passThrough, (value) => {
   appWindow.setIgnoreCursorEvents(value)
