@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { DeleteOutlined, PlusOutlined, PlayCircleOutlined } from '@ant-design/icons-vue'
-import { Button, Card, List, Modal, message, Spin } from 'ant-design-vue'
+import { Button, Card, Modal, message, Spin, Popconfirm } from 'ant-design-vue'
 import { invoke } from '@tauri-apps/api/core'
 import { emit } from '@tauri-apps/api/event'
 import { open } from '@tauri-apps/plugin-dialog'
@@ -17,19 +17,13 @@ function notify3DWindow() {
 const models = computed(() => store.models)
 const currentId = computed(() => store.currentModelId)
 
-onMounted(async () => {
-  await loadModels()
-})
+onMounted(async () => { await loadModels() })
 
 async function loadModels() {
   loading.value = true
   try {
     const list = await invoke<Model3DInfo[]>('list_3d_models')
     store.setModels(list)
-    // Auto-select first model if none selected
-    if (!store.currentModelId && list.length > 0) {
-      store.selectModel(list[0].id)
-    }
   } catch (e) {
     message.error('加载模型列表失败: ' + String(e))
   } finally {
@@ -43,7 +37,6 @@ async function handleImport() {
     multiple: false,
   })
   if (!file) return
-
   const name = (file as string).split(/[/\\]/).pop()?.replace('.pmx', '') || '未命名'
   loading.value = true
   try {
@@ -58,31 +51,22 @@ async function handleImport() {
   }
 }
 
-async function handleDelete(model: Model3DInfo) {
-  Modal.confirm({
-    title: '确认删除',
-    content: `确定要删除 "${model.name}" 吗？`,
-    okText: '删除',
-    cancelText: '取消',
-    okType: 'danger',
-    onOk: async () => {
-      try {
-        await invoke('remove_3d_model', { id: model.id })
-        if (currentId.value === model.id) store.selectModel('')
-        message.success('已删除')
-        await loadModels()
-        notify3DWindow()
-      } catch (e) {
-        message.error('删除失败: ' + String(e))
-      }
-    },
-  })
-}
-
 function handleSelect(model: Model3DInfo) {
   store.selectModel(model.id)
   message.success(`已选择: ${model.name}`)
   notify3DWindow()
+}
+
+async function handleDelete(model: Model3DInfo) {
+  try {
+    await invoke('remove_3d_model', { id: model.id })
+    if (currentId.value === model.id) store.selectModel('')
+    message.success('已删除')
+    await loadModels()
+    notify3DWindow()
+  } catch (e) {
+    message.error('删除失败: ' + String(e))
+  }
 }
 
 async function handleAddMotion(model: Model3DInfo) {
@@ -91,7 +75,6 @@ async function handleAddMotion(model: Model3DInfo) {
     multiple: false,
   })
   if (!file) return
-
   const name = (file as string).split(/[/\\]/).pop()?.replace('.vmd', '') || 'motion'
   try {
     await invoke('add_model_motion', { modelId: model.id, motionName: name, vmdPath: file })
@@ -104,105 +87,114 @@ async function handleAddMotion(model: Model3DInfo) {
 </script>
 
 <template>
-  <div class="model3d-config">
+  <div class="model3d-section">
+    <div class="section-header">
+      <span class="section-title">3D 模型</span>
+      <Button type="primary" size="small" @click="handleImport">
+        <PlusOutlined /> 导入
+      </Button>
+    </div>
+
     <Spin :spinning="loading">
-      <Card title="3D 模型管理" size="small">
-        <template #extra>
-          <Button type="primary" size="small" @click="handleImport">
-            <PlusOutlined /> 导入 PMX 模型
-          </Button>
-        </template>
-
-        <List
-          v-if="models.length > 0"
-          :data-source="models"
+      <div v-if="models.length > 0" class="model-grid">
+        <Card
+          v-for="item in models"
+          :key="item.id"
+          hoverable
           size="small"
+          :class="{ 'selected': item.id === currentId }"
+          @click="handleSelect(item)"
         >
-          <template #renderItem="{ item }">
-            <List.Item>
-              <div class="model-row">
-                <div class="model-info">
-                  <span class="model-name">{{ item.name }}</span>
-                  <span
-                    v-if="item.id === currentId"
-                    class="current-badge"
-                  >当前</span>
-                  <div class="model-actions">
-                    <Button
-                      v-if="item.id !== currentId"
-                      size="small"
-                      @click="handleSelect(item)"
-                    >选择</Button>
-                    <Button
-                      size="small"
-                      @click="handleAddMotion(item)"
-                    >
-                      <PlayCircleOutlined /> VMD
-                    </Button>
-                    <Button
-                      danger
-                      size="small"
-                      @click="handleDelete(item)"
-                    >
-                      <DeleteOutlined />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </List.Item>
+          <template #cover>
+            <div class="model-thumb">
+              <div class="thumb-placeholder">PMX</div>
+              <div v-if="item.id === currentId" class="current-tag">当前</div>
+            </div>
           </template>
-        </List>
 
-        <div v-else class="empty-hint">
-          暂无模型，点击"导入 PMX 模型"开始
-        </div>
-      </Card>
+          <Card.Meta :title="item.name" />
+
+          <template #actions>
+            <PlayCircleOutlined
+              key="motion"
+              title="添加动作"
+              @click.stop="handleAddMotion(item)"
+            />
+            <Popconfirm
+              title="确定删除此模型？"
+              @confirm="handleDelete(item)"
+            >
+              <DeleteOutlined key="delete" @click.stop />
+            </Popconfirm>
+          </template>
+        </Card>
+      </div>
+
+      <div v-else class="empty-hint">
+        暂无 3D 模型，点击"导入"添加
+      </div>
     </Spin>
   </div>
 </template>
 
 <style scoped>
-.model3d-config {
-  max-width: 600px;
+.model3d-section {
+  margin-top: 8px;
 }
 
-.model-row {
-  width: 100%;
+.section-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
 }
 
-.model-info {
-  flex: 1;
+.section-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.model-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 16px;
+}
+
+.model-thumb {
+  height: 120px;
   display: flex;
   align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
+  justify-content: center;
+  background: #f5f5f5;
+  position: relative;
+  overflow: hidden;
 }
 
-.model-name {
-  font-weight: 500;
-  min-width: 120px;
+.thumb-placeholder {
+  font-size: 24px;
+  font-weight: 700;
+  color: #ccc;
 }
 
-.current-badge {
+.current-tag {
+  position: absolute;
+  top: 6px;
+  right: 6px;
   font-size: 11px;
-  color: #52c41a;
-  border: 1px solid #52c41a;
+  color: #fff;
+  background: #52c41a;
   border-radius: 4px;
-  padding: 0 6px;
+  padding: 2px 8px;
 }
 
-.model-actions {
-  display: flex;
-  gap: 6px;
-  margin-left: auto;
+.selected {
+  border-color: #1677ff;
 }
 
 .empty-hint {
   text-align: center;
   color: #aaa;
-  padding: 24px;
+  padding: 32px;
   font-size: 14px;
 }
 </style>
