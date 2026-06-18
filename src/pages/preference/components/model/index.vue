@@ -13,6 +13,7 @@ import { MasonryGrid, MasonryGridItem } from 'vue3-masonry-css'
 
 import FloatMenu from './components/float-menu/index.vue'
 import Upload from './components/upload/index.vue'
+import Model3D from '@/pages/comprehensive_function/components/model3d/index.vue'
 
 import { useModelStore } from '@/stores/model'
 import { join } from '@/utils/path'
@@ -109,4 +110,8 @@ async function handleDelete(item: Model) {
   </MasonryGrid>
 
   <FloatMenu />
+
+  <div class="mt-8">
+    <Model3D />
+  </div>
 </template>
