@@ -59,10 +59,12 @@ export function startRenderLoop(
   renderer: THREE.WebGLRenderer,
   scene: THREE.Scene,
   camera: THREE.Camera,
-) {
+): () => void {
   const clock = new THREE.Clock()
+  let stopped = false
 
   function tick() {
+    if (stopped) return
     const delta = clock.getDelta()
     const elapsed = clock.getElapsedTime()
 
@@ -79,4 +81,5 @@ export function startRenderLoop(
   }
 
   requestAnimationFrame(tick)
+  return () => { stopped = true }
 }

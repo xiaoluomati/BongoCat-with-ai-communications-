@@ -19,6 +19,7 @@ export function useModel3D() {
   let anim: AnimationState | null = null
   let interaction: ModelInteraction | null = null
   let resizeObserver: ResizeObserver | null = null
+  let stopLoop: (() => void) | null = null
   const loader = new ModelLoader()
 
   async function init(canvas: HTMLCanvasElement) {
@@ -75,7 +76,8 @@ export function useModel3D() {
         }
       }
 
-      startRenderLoop(anim, model, ctx.renderer, ctx.scene, ctx.camera)
+      stopLoop?.()
+      stopLoop = startRenderLoop(anim, model, ctx.renderer, ctx.scene, ctx.camera)
 
       interaction?.destroy()
       interaction = new ModelInteraction(model, ctx.camera, ctx.renderer.domElement)
@@ -92,6 +94,8 @@ export function useModel3D() {
   }
 
   function unloadModel() {
+    stopLoop?.()
+    stopLoop = null
     if (model) {
       ctx?.scene.remove(model)
       model = null
@@ -108,6 +112,7 @@ export function useModel3D() {
     resizeObserver = null
     ctx?.renderer.dispose()
     ctx = null
+    loader.destroy()
     window.removeEventListener('resize', onResize)
   }
 

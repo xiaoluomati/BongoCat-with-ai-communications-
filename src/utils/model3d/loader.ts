@@ -61,9 +61,21 @@ export class ModelLoader {
   }
 
   private async preloadTextures(baseDir: string) {
+    // Revoke old blob URLs before clearing to free memory
+    for (const url of this.textureBlobs.values()) {
+      URL.revokeObjectURL(url)
+    }
     this.textureBlobs.clear()
     await this.scanDir(baseDir)
-    console.log(`[loader] preloaded ${this.textureBlobs.size} textures:`, [...this.textureBlobs.keys()].join(', '))
+    console.log(`[loader] preloaded ${this.textureBlobs.size} textures`)
+  }
+
+  // Clean up all blob URLs and release memory
+  destroy() {
+    for (const url of this.textureBlobs.values()) {
+      URL.revokeObjectURL(url)
+    }
+    this.textureBlobs.clear()
   }
 
   private async scanDir(dirPath: string) {
